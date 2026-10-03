@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autobuild.local/schemas/notification.schema.json",
+  "title": "Run notification payload",
+  "description": "Built deterministically from run data by autobuild/notification_payload.py; providers only format and deliver it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "run_id", "project", "implementation", "status", "summary", "validation", "review",
+    "branch", "commit", "next_step", "human_action", "protected_branches"
+  ],
+  "properties": {
+    "run_id": { "type": "string", "minLength": 1 },
+    "project": { "type": "string", "minLength": 1 },
+    "implementation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "title": { "type": "string", "minLength": 1 }
+      }
+    },
+    "status": {
+      "enum": [
+        "IDLE", "PLANNING", "READY", "IMPLEMENTING", "VALIDATING", "REVIEWING", "REVISING",
+        "PASSED", "HUMAN_BLOCKED", "FAILED", "STOP_REQUESTED", "STOPPED", "COMPLETED"
+      ]
+    },
+    "summary": { "type": "string" },
+    "validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["authoritative", "tests_passed", "tests_failed", "browser_checks_passed", "browser_checks_failed", "failed_commands"],
+      "properties": {
+        "authoritative": { "type": "boolean" },
+        "tests_passed": { "type": "integer", "minimum": 0 },
+        "tests_failed": { "type": "integer", "minimum": 0 },
+        "browser_checks_passed": { "type": "integer", "minimum": 0 },
+        "browser_checks_failed": { "type": "integer", "minimum": 0 },
+        "failed_commands": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cycles", "initial_status", "final_status", "fixes"],
+      "properties": {
+        "cycles": { "type": "integer", "minimum": 0 },
+        "initial_status": { "enum": ["PASS", "REVISE", "BLOCKED", null] },
+        "final_status": { "enum": ["PASS", "REVISE", "BLOCKED", null] },
+        "fixes": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "branch": { "type": ["string", "null"] },
+    "commit": { "type": ["string", "null"] },
+    "next_step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["implementation_id", "autonomy", "action", "reasons"],
+      "properties": {
+        "implementation_id": { "type": ["string", "null"] },
+        "autonomy": { "enum": ["green", "yellow", "red", null] },
+        "action": { "enum": ["continue", "stop", "none"] },
+        "reasons": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "human_action": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "protected_branches": {
+      "description": "'modified' must come from comparing protected refs before and after the run, never from an agent's claim.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["names", "modified"],
+      "properties": {
+        "names": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+        "modified": { "type": "boolean" }
+      }
+    }
+  }
+}

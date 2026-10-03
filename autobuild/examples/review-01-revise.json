@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "run_id": "2026-10-03-EX-1",
+  "implementation_id": "EX-1",
+  "cycle": 1,
+  "status": "REVISE",
+  "reviewer": { "agent": "codex", "session_id": "rev-1c90" },
+  "reviewed_at": "2026-10-03T14:52:30Z",
+  "evidence_reviewed": ["brief", "git_diff", "changed_files", "validation_output", "adrs"],
+  "findings": [
+    {
+      "id": "R1-1",
+      "severity": "major",
+      "requirement": "Unit tests cover the boundary (limit, limit + 1)",
+      "evidence": "tests/test_caption_limits.py tests only limit + 50; no exact-limit case",
+      "affected_files": ["tests/test_caption_limits.py"],
+      "required_correction": "Add exact-limit and limit + 1 boundary tests"
+    }
+  ]
+}

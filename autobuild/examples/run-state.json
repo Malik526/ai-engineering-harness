@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "run_id": "2026-10-03-EX-1",
+  "implementation_id": "EX-1",
+  "state": "PASSED",
+  "branch": "agent/EX-1-caption-length",
+  "parent_branch": "main",
+  "worktree": "../content-automation.worktrees/EX-1",
+  "brief_sha256": "5f2b6c1e0d9a4b7c8e3f1a2d4c6b8e0f1a3c5e7d9b1f3a5c7e9d1b3f5a7c9e1d",
+  "started_at": "2026-10-03T14:00:00Z",
+  "updated_at": "2026-10-03T15:12:40Z",
+  "review_cycle": 2,
+  "agent_sessions": [
+    { "agent": "claude-code", "role": "implementer", "session_id": "impl-7f3a", "started_at": "2026-10-03T14:00:05Z", "ended_at": "2026-10-03T14:41:10Z" },
+    { "agent": "codex", "role": "reviewer", "session_id": "rev-1c90", "started_at": "2026-10-03T14:44:00Z", "ended_at": "2026-10-03T14:52:30Z" },
+    { "agent": "claude-code", "role": "implementer", "session_id": "impl-7f3a", "started_at": "2026-10-03T14:53:00Z", "ended_at": "2026-10-03T15:05:00Z" },
+    { "agent": "codex", "role": "reviewer", "session_id": "rev-4d21", "started_at": "2026-10-03T15:06:00Z", "ended_at": "2026-10-03T15:12:00Z" }
+  ],
+  "last_commit": "82fa312",
+  "next_implementation": "EX-2",
+  "stop_requested": false,
+  "failure": null,
+  "human_gate": null
+}

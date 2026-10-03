@@ -8,6 +8,9 @@
         ▼
 absolute symlinks in runtime locations
   ~/.agents/<POLICY>.md          ← policies/global/<POLICY>.md
+  ~/.agents/autobuild            ← autobuild/
+  ~/.agents/skills/<skill>       ← skills/custom/<skill>
+  ~/.codex/skills/<skill>        ← skills/custom/<skill>
         │
         ▼
 thin runtime adapters (not in this repo)

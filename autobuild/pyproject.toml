@@ -1,0 +1,10 @@
+[project]
+name = "autobuild"
+version = "0.1.0"
+description = "Shared control plane for planner / implementer / reviewer agent workflows."
+requires-python = ">=3.10"
+dependencies = ["jsonschema>=4.18", "pyyaml>=6"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

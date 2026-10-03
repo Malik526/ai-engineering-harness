@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autobuild.local/schemas/review.schema.json",
+  "title": "Independent review result",
+  "description": "runs/<run-id>/review/review-NN.json. Written by the fresh reviewer; its status alone drives PASS / REVISE / BLOCKED.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "run_id", "implementation_id", "cycle", "status",
+    "reviewer", "reviewed_at", "evidence_reviewed", "findings"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "run_id": { "type": "string", "minLength": 1 },
+    "implementation_id": { "type": "string", "minLength": 1 },
+    "cycle": { "type": "integer", "minimum": 1 },
+    "status": { "enum": ["PASS", "REVISE", "BLOCKED"] },
+    "reviewer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["agent", "session_id"],
+      "properties": {
+        "agent": { "enum": ["codex", "claude-code"] },
+        "session_id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "reviewed_at": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+    },
+    "evidence_reviewed": {
+      "description": "Which evidence the reviewer actually examined. The approved brief and the real git diff are mandatory.",
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "brief", "git_diff", "changed_files", "validation_output", "browser_evidence",
+          "adrs", "project_state", "repository_docs", "implementer_summary"
+        ]
+      },
+      "allOf": [
+        { "contains": { "const": "brief" } },
+        { "contains": { "const": "git_diff" } }
+      ]
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "severity", "requirement", "evidence", "affected_files", "required_correction"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^R[0-9]+-[0-9]+$" },
+          "severity": { "enum": ["blocker", "major", "minor", "nit"] },
+          "requirement": { "type": "string", "minLength": 1 },
+          "evidence": { "type": "string", "minLength": 1 },
+          "affected_files": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+          "required_correction": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "blocked_reason": { "type": "string", "minLength": 1 }
+  },
+  "allOf": [
+    {
+      "description": "PASS may carry minor notes but no blocker or major finding.",
+      "if": { "properties": { "status": { "const": "PASS" } } },
+      "then": {
+        "properties": {
+          "findings": {
+            "not": { "contains": { "properties": { "severity": { "enum": ["blocker", "major"] } } } }
+          }
+        }
+      }
+    },
+    {
+      "description": "REVISE must tell the implementer what to fix.",
+      "if": { "properties": { "status": { "const": "REVISE" } } },
+      "then": { "properties": { "findings": { "minItems": 1 } } }
+    },
+    {
+      "if": { "properties": { "status": { "const": "BLOCKED" } } },
+      "then": { "required": ["blocked_reason"] }
+    }
+  ]
+}

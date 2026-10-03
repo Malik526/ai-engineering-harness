@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "run_id": "2026-10-03-EX-1",
+  "producer": "controller",
+  "commands": [
+    {
+      "name": "pytest",
+      "kind": "test",
+      "command": "pytest -q",
+      "exit_code": 0,
+      "passed": 37,
+      "failed": 0,
+      "skipped": 2,
+      "log_path": "logs/pytest-02.log",
+      "started_at": "2026-10-03T15:05:10Z",
+      "duration_seconds": 41.3
+    }
+  ]
+}

@@ -8,6 +8,7 @@ it.
 
 | Skill | Location | Class | In this repo |
 | --- | --- | --- | --- |
+| `implementation-planning` | `skills/custom/` here, linked to `~/.agents/skills` and `~/.codex/skills` | CUSTOM (autobuild planner) | Yes, canonical |
 | `sanity-best-practices` | `~/.agents/skills`, linked into `~/.claude/skills` | VENDOR (`sanity-io/agent-toolkit`, tracked in `~/.agents/.skill-lock.json`) | No |
 | `sanity-migration` | same | VENDOR (same source) | No |
 | `lead-capture-data-contract` | `~/.agents/skills` | CUSTOM, project-specific (Growth Agency) | No, belongs with Growth Agency |

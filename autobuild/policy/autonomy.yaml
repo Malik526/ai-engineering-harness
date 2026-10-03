@@ -1,0 +1,31 @@
+# Autonomy policy — data read by autobuild/autonomy.py.
+#
+# The planner assigns a class to each implementation; this file decides what
+# the controller may do with it. No model is asked whether to continue.
+# Human-readable rationale and examples: docs/AUTONOMY_POLICY.md.
+version: 1
+
+classes:
+  green:
+    # Runs without the human and may roll over into the next eligible item.
+    execution: autonomous
+    may_roll_over: true
+  yellow:
+    # Agents may prepare work, but the run stops at a defined human gate.
+    # Phase 0.1–0.5 controllers treat this as "stop before starting";
+    # prepare-only execution arrives with a later phase.
+    execution: prepare_only
+    may_roll_over: false
+  red:
+    # Autonomous execution is prohibited. Only the human performs this work.
+    execution: prohibited
+    may_roll_over: false
+
+# Every condition below must hold before the controller starts an
+# implementation autonomously, whatever its class.
+start_conditions:
+  require_status_ready: true
+  require_dependencies_done: true
+  require_no_human_requirements: true
+  require_no_external_requirements: true
+  require_no_human_validation: true

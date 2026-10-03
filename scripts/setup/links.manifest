@@ -10,3 +10,11 @@ policies/global/EXECUTION.md               ~/.agents/EXECUTION.md
 policies/global/GIT.md                     ~/.agents/GIT.md
 policies/global/SECURITY.md                ~/.agents/SECURITY.md
 policies/global/VERIFICATION.md            ~/.agents/VERIFICATION.md
+
+# Autobuild framework — the stable ~/.agents/autobuild path used by docs, skills and project configs.
+autobuild                                  ~/.agents/autobuild
+
+# Planner skill — linked to Codex, the default planner runtime. ~/.agents/skills is the
+# shared user skill directory; ~/.codex/skills covers Codex versions that read only their own.
+skills/custom/implementation-planning      ~/.agents/skills/implementation-planning
+skills/custom/implementation-planning      ~/.codex/skills/implementation-planning

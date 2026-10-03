@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autobuild.local/schemas/config.schema.json",
+  "title": "Autobuild project configuration",
+  "description": "Per-project .autobuild/config.yaml. The only autobuild file a project owns besides its run artifacts; everything else lives in the shared core.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "project", "git", "paths", "limits", "validation", "notifications", "control"],
+  "properties": {
+    "version": { "const": 1 },
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 }
+      }
+    },
+    "git": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protected_branches", "branch_prefix"],
+      "properties": {
+        "protected_branches": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "branch_prefix": {
+          "description": "Prefix for every automation branch, e.g. 'agent/'. Must end with '/'.",
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]*/$"
+        }
+      }
+    },
+    "paths": {
+      "description": "Repository-relative paths. Absolute paths and '..' are rejected so a project config cannot point agents outside the repository.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["roadmap", "project_state", "adr_directory", "runs_directory"],
+      "properties": {
+        "roadmap": { "$ref": "#/$defs/relative_path" },
+        "project_state": { "$ref": "#/$defs/relative_path" },
+        "adr_directory": { "$ref": "#/$defs/relative_path" },
+        "runs_directory": { "$ref": "#/$defs/relative_path" }
+      }
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_review_cycles", "max_consecutive_implementations"],
+      "properties": {
+        "max_review_cycles": { "type": "integer", "minimum": 1, "maximum": 10 },
+        "max_consecutive_implementations": { "type": "integer", "minimum": 1, "maximum": 50 }
+      }
+    },
+    "validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["browser_tool", "require_clean_git_before_start"],
+      "properties": {
+        "browser_tool": { "enum": ["none", "playwright", "agent-browser"] },
+        "require_clean_git_before_start": { "type": "boolean" }
+      }
+    },
+    "notifications": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "provider"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "provider": { "enum": ["console", "file", "email"] }
+      }
+    },
+    "control": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["remote_stop_enabled", "provider"],
+      "properties": {
+        "remote_stop_enabled": { "type": "boolean" },
+        "provider": { "enum": ["none", "file", "github", "supabase"] }
+      },
+      "if": { "properties": { "remote_stop_enabled": { "const": true } } },
+      "then": { "properties": { "provider": { "not": { "const": "none" } } } }
+    }
+  },
+  "$defs": {
+    "relative_path": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(^|/)\\.\\.(/|$)).+$"
+    }
+  }
+}

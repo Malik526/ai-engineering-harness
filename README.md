@@ -30,9 +30,10 @@ files through symlinks. Nothing here belongs to a single application.
 
 ```text
 policies/global/      global policies, linked to ~/.agents/<NAME>.md
-skills/custom/        custom skills (added once the repo is established)
+skills/custom/        custom skills (implementation-planning)
+autobuild/            autobuild framework, linked to ~/.agents/autobuild
 scripts/setup/        links.manifest + install.py (check / apply / adopt links)
-docs/                 ARCHITECTURE, INSTALLATION, SKILL_MANAGEMENT, decisions/
+docs/                 ARCHITECTURE, INSTALLATION, SKILL_MANAGEMENT
 CHANGELOG.md
 ```
 

@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Runs the autobuild CLI with the core's own virtualenv, from any directory.
+# Usage: ~/.agents/autobuild/bin/autobuild <command> [args]   (see autobuild/cli.py)
+set -euo pipefail
+
+CORE="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+PY="$CORE/.venv/bin/python"
+
+if [[ ! -x "$PY" ]]; then
+  echo "autobuild: no virtualenv at $CORE/.venv" >&2
+  echo "  python3 -m venv $CORE/.venv && $CORE/.venv/bin/pip install -r $CORE/requirements.txt" >&2
+  exit 2
+fi
+
+PYTHONPATH="$CORE${PYTHONPATH:+:$PYTHONPATH}" exec "$PY" -m autobuild "$@"

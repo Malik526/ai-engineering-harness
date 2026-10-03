@@ -1,0 +1,31 @@
+# Safety policy — operation ids read by autobuild/safety.py.
+#
+# Default deny: an operation the controller does not find in `allowed` is
+# refused, even if it is not listed in `prohibited`. The prohibited list exists
+# so the intent is explicit and so tests can prove the two lists never overlap.
+# Human-readable trust boundaries: docs/SAFETY_MODEL.md.
+version: 1
+
+allowed:
+  - repo_read
+  - worktree_edit
+  - run_tests
+  - run_dev_server
+  - browser_automation
+  - docs_update
+  - commit_to_assigned_branch
+  - create_child_branch
+
+prohibited:
+  - merge_protected_branch
+  - push_protected_branch
+  - commit_protected_branch
+  - force_push
+  - delete_remote_branch
+  - production_deploy
+  - production_db_destructive
+  - secret_disclosure
+  - filesystem_outside_scope
+  - external_purchase
+  - billing_change
+  - account_creation
