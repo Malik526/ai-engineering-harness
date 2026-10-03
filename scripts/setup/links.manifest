@@ -1,0 +1,12 @@
+# Runtime links: each line maps a canonical harness path to the runtime
+# location agents read from. Consumed by scripts/setup/install.py.
+#
+# <source, relative to the repo root>      <target, ~ expands to $HOME>
+
+# Global policies — imported by the ~/.claude/CLAUDE.md and ~/.codex/AGENTS.md adapters.
+policies/global/CODING.md                  ~/.agents/CODING.md
+policies/global/DOCUMENTATION.md           ~/.agents/DOCUMENTATION.md
+policies/global/EXECUTION.md               ~/.agents/EXECUTION.md
+policies/global/GIT.md                     ~/.agents/GIT.md
+policies/global/SECURITY.md                ~/.agents/SECURITY.md
+policies/global/VERIFICATION.md            ~/.agents/VERIFICATION.md

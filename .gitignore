@@ -1,0 +1,17 @@
+# Python runtime artifacts and per-machine virtualenvs.
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Secrets and local environment — never part of the harness.
+.env
+.env.*
+*.pem
+*.key
+auth.json
+credentials*.json
+
+# Agent run output, if a harness tool is ever run from inside this repo.
+.autobuild/runs/*
+!.autobuild/runs/.gitkeep
