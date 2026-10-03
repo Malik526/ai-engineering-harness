@@ -56,7 +56,7 @@ def test_review_cycle_limit_enforced():
 def test_reviewer_must_be_fresh_session_even_with_same_provider():
     state = example_json("run-state.json")
     for session in state["agent_sessions"]:
-        session["agent"] = "claude-code"  # same provider in both roles is allowed...
+        session["provider"] = "claude"  # same provider in both roles is allowed...
     assert run_state_errors(state) == []
     state["agent_sessions"][1]["session_id"] = "impl-7f3a"  # ...reusing the implementer session is not
     assert any("reuses implementer session" in e for e in run_state_errors(state))

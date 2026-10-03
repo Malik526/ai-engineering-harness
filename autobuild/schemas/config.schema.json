@@ -5,7 +5,7 @@
   "description": "Per-project .autobuild/config.yaml. The only autobuild file a project owns besides its run artifacts; everything else lives in the shared core.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["version", "project", "git", "paths", "limits", "validation", "notifications", "control"],
+  "required": ["version", "project", "agents", "git", "paths", "limits", "validation", "notifications", "control"],
   "properties": {
     "version": { "const": 1 },
     "project": {
@@ -14,6 +14,30 @@
       "required": ["name"],
       "properties": {
         "name": { "type": "string", "minLength": 1 }
+      }
+    },
+    "agents": {
+      "description": "Which provider fills each engineering role. Providers must exist in providers/registry.yaml and support the role; one provider may fill every role.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["planner", "implementer", "reviewer"],
+      "properties": {
+        "planner": { "$ref": "#/$defs/role_assignment" },
+        "implementer": { "$ref": "#/$defs/role_assignment" },
+        "reviewer": { "$ref": "#/$defs/role_assignment" }
+      }
+    },
+    "providers": {
+      "description": "Optional per-provider overrides, keyed by registry id.",
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/provider_id" },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "command": { "description": "Executable to run instead of the registry default.", "type": "string", "minLength": 1 },
+          "model": { "description": "Model to request; the provider default when omitted.", "type": "string", "minLength": 1 }
+        }
       }
     },
     "git": {
@@ -86,6 +110,13 @@
     }
   },
   "$defs": {
+    "provider_id": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,31}$" },
+    "role_assignment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider"],
+      "properties": { "provider": { "$ref": "#/$defs/provider_id" } }
+    },
     "relative_path": {
       "type": "string",
       "minLength": 1,

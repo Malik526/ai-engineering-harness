@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from autobuild.paths import PROJECT_CONFIG_RELPATH
+from autobuild.provider_registry import RoleAssignment, assignment_errors, resolve_assignments
 from autobuild.schemas import schema_errors
 from autobuild.yaml_loader import load_yaml
 
@@ -38,6 +39,11 @@ class ProjectConfig:
         return self.data["git"]["branch_prefix"]
 
     @property
+    def agents(self) -> dict[str, RoleAssignment]:
+        """Role -> provider assignment, with project overrides applied."""
+        return resolve_assignments(self.data)
+
+    @property
     def max_review_cycles(self) -> int:
         return self.data["limits"]["max_review_cycles"]
 
@@ -56,6 +62,7 @@ def config_errors(data: Any) -> list[str]:
     for protected in data["git"]["protected_branches"]:
         if protected.startswith(prefix):
             errors.append(f"git: protected branch {protected!r} falls under branch_prefix {prefix!r}")
+    errors.extend(assignment_errors(data))
     return errors
 
 

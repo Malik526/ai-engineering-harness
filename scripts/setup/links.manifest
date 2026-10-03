@@ -14,7 +14,9 @@ policies/global/VERIFICATION.md            ~/.agents/VERIFICATION.md
 # Autobuild framework — the stable ~/.agents/autobuild path used by docs, skills and project configs.
 autobuild                                  ~/.agents/autobuild
 
-# Planner skill — linked to Codex, the default planner runtime. ~/.agents/skills is the
-# shared user skill directory; ~/.codex/skills covers Codex versions that read only their own.
+# Planner skill — any provider may be configured as planner, so every runtime gets it.
+# ~/.agents/skills is the shared user skill directory; the runtime-specific dirs cover
+# runtimes that do not read it.
 skills/custom/implementation-planning      ~/.agents/skills/implementation-planning
 skills/custom/implementation-planning      ~/.codex/skills/implementation-planning
+skills/custom/implementation-planning      ~/.claude/skills/implementation-planning

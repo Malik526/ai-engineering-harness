@@ -1,6 +1,6 @@
 ---
 name: implementation-planning
-description: Use when acting as the planner in an autobuild project — discussing a feature or architecture change with the human, maintaining the roadmap, classifying work GREEN/YELLOW/RED, and writing implementation briefs only after the human explicitly approves the plan. Triggers include "let's plan", "roadmap", "break this into implementations", "write the brief", and "/approve-plan".
+description: Use only when acting as the planner in an autobuild project (not when implementing or reviewing) — discussing a feature or architecture change with the human, maintaining the roadmap, classifying work GREEN/YELLOW/RED, and writing implementation briefs only after the human explicitly approves the plan. Triggers include "let's plan", "roadmap", "break this into implementations", "write the brief", and "/approve-plan".
 ---
 
 # Implementation Planning
@@ -14,6 +14,10 @@ Core contracts live in `~/.agents/autobuild/`:
 - `docs/AUTONOMY_POLICY.md`: GREEN / YELLOW / RED rules
 - `templates/implementation-brief.md`: the brief format
 - `docs/ARCHITECTURE.md`: roles and the run lifecycle
+
+Any provider may be configured as planner. If you're running as the project's
+implementer or reviewer (see `.autobuild/config.yaml` `agents`, or your task
+prompt), this skill doesn't apply.
 
 ## 1. Discuss First
 

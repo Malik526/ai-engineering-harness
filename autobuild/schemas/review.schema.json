@@ -18,9 +18,9 @@
     "reviewer": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["agent", "session_id"],
+      "required": ["provider", "session_id"],
       "properties": {
-        "agent": { "enum": ["codex", "claude-code"] },
+        "provider": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,31}$" },
         "session_id": { "type": "string", "minLength": 1 }
       }
     },

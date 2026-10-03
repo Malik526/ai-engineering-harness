@@ -40,9 +40,9 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["agent", "role", "session_id", "started_at", "ended_at"],
+        "required": ["provider", "role", "session_id", "started_at", "ended_at"],
         "properties": {
-          "agent": { "enum": ["claude-code", "codex"] },
+          "provider": { "$ref": "#/$defs/provider_id" },
           "role": { "enum": ["planner", "implementer", "reviewer"] },
           "session_id": { "type": "string", "minLength": 1 },
           "started_at": { "$ref": "#/$defs/timestamp" },
@@ -137,6 +137,11 @@
   ],
   "$defs": {
     "implementation_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$" },
+    "provider_id": {
+      "description": "A providers/registry.yaml id. Open-ended so new providers need no schema change.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{0,31}$"
+    },
     "timestamp": {
       "type": "string",
       "format": "date-time",

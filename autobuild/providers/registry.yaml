@@ -1,0 +1,17 @@
+# Provider registry — the only place autobuild names concrete agent providers.
+#
+# Core code works with roles and provider ids; it never branches on a
+# specific provider. A project assigns providers to roles in
+# .autobuild/config.yaml `agents`, and may override `executable` per provider
+# under `providers.<id>.command`. Adding a provider: docs/PROVIDERS.md.
+version: 1
+
+providers:
+  claude:
+    display_name: Claude Code
+    executable: claude
+    roles: [planner, implementer, reviewer]
+  codex:
+    display_name: Codex
+    executable: codex
+    roles: [planner, implementer, reviewer]

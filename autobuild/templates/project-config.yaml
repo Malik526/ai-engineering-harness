@@ -7,6 +7,19 @@ version: 1
 project:
   name: Example Project
 
+agents:                      # any registry provider may fill any role it supports
+  planner:
+    provider: codex
+  implementer:
+    provider: claude
+  reviewer:
+    provider: codex          # same provider as implementer is allowed: independence = fresh session
+
+# providers:                 # optional overrides, keyed by provider id
+#   claude:
+#     command: claude
+#     model: <model id>
+
 git:
   protected_branches: [main]
   branch_prefix: agent/

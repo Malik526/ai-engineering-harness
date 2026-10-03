@@ -7,6 +7,7 @@
     autobuild review FILE...                validate review results
     autobuild validation FILE...            validate validation results
     autobuild gate FILE [--done ID,...]     show the autonomy gate decision for a brief
+    autobuild agents [PROJECT]              show which provider fills each role
 
 Exit status is 0 when everything validates, 1 otherwise.
 """
@@ -22,6 +23,8 @@ from autobuild.config import ConfigError, load_project_config, missing_paths
 from autobuild.implementations import brief_file_errors, load_brief
 from autobuild.paths import EXAMPLES_DIR
 from autobuild.policy_loader import load_policy
+from autobuild.provider_registry import load_registry
+from autobuild.roles import ROLES
 from autobuild.run_state_checks import run_state_errors
 from autobuild.schemas import SCHEMA_NAMES, load_schema, schema_errors
 from autobuild.states import RunState
@@ -64,6 +67,9 @@ def _check_core() -> bool:
     ok &= _report("run states match schema",
                   [] if states == schema_states else [f"code {sorted(states)} vs schema {sorted(schema_states)}"])
 
+    bad_roles = sorted({r for p in load_registry()["providers"].values() for r in p["roles"]} - set(ROLES))
+    ok &= _report("provider registry roles are known", [f"unknown roles: {', '.join(bad_roles)}"] if bad_roles else [])
+
     for brief in sorted((EXAMPLES_DIR / "implementations").glob("*.md")):
         ok &= _report(f"example {brief.name}", brief_file_errors(brief))
     ok &= _report("example run-state.json", run_state_errors(json.loads((EXAMPLES_DIR / "run-state.json").read_text())))
@@ -105,6 +111,17 @@ def _check_each(paths: list[Path], errors_for: Callable[[Path], list[str]]) -> b
     return ok
 
 
+def _show_agents(project: Path) -> bool:
+    try:
+        config = load_project_config(project)
+    except ConfigError as exc:
+        return _report(str(exc.path), exc.errors)
+    for role, a in config.agents.items():
+        model = f", model {a.model}" if a.model else ""
+        print(f"{role:<12} {a.display_name} ({a.provider}; command {a.command}{model})")
+    return True
+
+
 def _show_gate(path: Path, done: str) -> bool:
     errors = brief_file_errors(path)
     if errors:
@@ -136,6 +153,8 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("gate")
     p.add_argument("file", type=Path)
     p.add_argument("--done", default="", help="comma-separated ids of completed implementations")
+    p = sub.add_parser("agents")
+    p.add_argument("project", nargs="?", type=Path, default=Path.cwd())
     args = parser.parse_args(argv)
 
     if args.command == "check":
@@ -148,6 +167,8 @@ def main(argv: list[str] | None = None) -> int:
         ok = _check_state(args.file, args.project)
     elif args.command in ("review", "validation"):
         ok = _check_each(args.files, lambda path: _json_file_errors(args.command, path))
+    elif args.command == "agents":
+        ok = _show_agents(args.project)
     else:
         ok = _show_gate(args.file, args.done)
     return 0 if ok else 1

@@ -11,6 +11,7 @@ absolute symlinks in runtime locations
   ~/.agents/autobuild            ← autobuild/
   ~/.agents/skills/<skill>       ← skills/custom/<skill>
   ~/.codex/skills/<skill>        ← skills/custom/<skill>
+  ~/.claude/skills/<skill>       ← skills/custom/<skill>
         │
         ▼
 thin runtime adapters (not in this repo)

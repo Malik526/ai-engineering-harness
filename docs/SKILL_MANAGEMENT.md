@@ -8,7 +8,7 @@ it.
 
 | Skill | Location | Class | In this repo |
 | --- | --- | --- | --- |
-| `implementation-planning` | `skills/custom/` here, linked to `~/.agents/skills` and `~/.codex/skills` | CUSTOM (autobuild planner) | Yes, canonical |
+| `implementation-planning` | `skills/custom/` here, linked to `~/.agents/skills`, `~/.codex/skills`, `~/.claude/skills` | CUSTOM (autobuild planner) | Yes, canonical |
 | `sanity-best-practices` | `~/.agents/skills`, linked into `~/.claude/skills` | VENDOR (`sanity-io/agent-toolkit`, tracked in `~/.agents/.skill-lock.json`) | No |
 | `sanity-migration` | same | VENDOR (same source) | No |
 | `lead-capture-data-contract` | `~/.agents/skills` | CUSTOM, project-specific (Growth Agency) | No, belongs with Growth Agency |
@@ -17,7 +17,7 @@ it.
 ## Adding a Custom Skill
 
 1. Create `skills/custom/<name>/SKILL.md`. Keep it about this workflow, and don't re-teach generic capabilities that existing skills already cover (browser automation, git, generic code review).
-2. Add one manifest line per runtime that should see it, in `scripts/setup/links.manifest`. Link a skill only to runtimes whose role uses it. A planner-only skill doesn't need to be in the implementer's runtime.
+2. Add one manifest line per runtime that should see it, in `scripts/setup/links.manifest`. Link a skill to every runtime that may fill the role it serves. Autobuild roles are assignable to any provider, so role skills go to all runtimes, and their descriptions say when they apply.
 3. Run `scripts/setup/install.py --apply`, then the check mode.
 4. Add a CHANGELOG entry and commit.
 

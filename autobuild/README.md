@@ -14,10 +14,11 @@ autobuild/        Python package: states, autonomy gate, safety checks, artifact
 schemas/          JSON Schemas (config, implementation, run-state, review,
                   validation, notification)
 policy/           autonomy.yaml, safety.yaml (data the controller enforces)
+providers/        registry.yaml: the only place concrete agent providers are named
 templates/        implementation brief, implementation summary, review,
                   notification body, starter project config
 examples/         GREEN / YELLOW / RED briefs, run state, reviews, validation
-docs/             ARCHITECTURE, AUTONOMY_POLICY, ARTIFACT_CONTRACT, SAFETY_MODEL,
+docs/             ARCHITECTURE, PROVIDERS, AUTONOMY_POLICY, ARTIFACT_CONTRACT, SAFETY_MODEL,
                   CONTROL_CONTRACT, NOTIFICATION_CONTRACT, decisions/
 tests/            pytest suite, including doc ↔ code consistency checks
 bin/autobuild     CLI wrapper using this directory's .venv
@@ -41,6 +42,7 @@ autobuild brief FILE...                 # validate implementation briefs
 autobuild state FILE [--project DIR]    # validate a run state
 autobuild review FILE... | validation FILE...
 autobuild gate FILE --done ID,...       # autonomy gate decision for a brief
+autobuild agents [PROJECT]              # resolved role -> provider assignment
 ```
 
 `bin/autobuild` resolves symlinks, so `~/.agents/autobuild/bin/autobuild`

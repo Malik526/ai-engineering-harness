@@ -11,19 +11,20 @@ notifications.
 
 ## Roles
 
-| Role | Default provider (0.1) | Responsible for | Never does |
+| Role | Filled by | Responsible for | Never does |
 | --- | --- | --- | --- |
 | Human | — | Architecture and product authority; approves plans; merges to protected branches; secrets; external accounts; production | — |
-| Planner | Codex | Interactive planning conversation, challenging assumptions, roadmap, approved briefs, autonomy classification | Starts implementation before explicit approval |
-| Controller | Autobuild (this framework) | State machine, autonomy gate, worktree/branch isolation, stop handling, notifications | Asks a model whether to continue |
-| Implementer | Claude Code | Implements one approved brief inside its worktree, runs validation, updates docs, writes a summary | Approves its own work |
-| Reviewer | Codex, fresh session | Judges the brief against the actual diff and evidence; returns PASS / REVISE / BLOCKED | Treats the implementer's summary as evidence |
+| Planner | configured provider | Interactive planning conversation, challenging assumptions, roadmap, approved briefs, autonomy classification | Starts implementation before explicit approval |
+| Controller | Autobuild (deterministic code) | State machine, autonomy gate, worktree/branch isolation, stop handling, notifications | Asks a model whether to continue |
+| Implementer | configured provider | Implements one approved brief inside its worktree, runs validation, updates docs, writes a summary | Approves its own work |
+| Reviewer | configured provider, always a fresh session | Judges the brief against the actual diff and evidence; returns PASS / REVISE / BLOCKED | Treats the implementer's summary as evidence |
 
-Independence comes from the **fresh reviewer session**, not from the vendor.
-A reviewer session may never be a session the implementer used
-(`run_state_checks.py` enforces this). Role-to-provider assignment becomes
-configuration in the provider-agnostic follow-up. The core never hard-codes
-which vendor fills a role.
+Providers (currently Claude Code and Codex) are assigned to roles in each
+project's `.autobuild/config.yaml` `agents` block, and any provider may fill
+any role. Orchestration code never refers to a specific provider. See
+`PROVIDERS.md`. Independence comes from the **fresh reviewer session**, not
+from the vendor: a reviewer session may never be a session the implementer
+used (`run_state_checks.py` enforces this).
 
 ## Flow
 
@@ -88,9 +89,9 @@ Transitions:
 
 | Location | Contents |
 | --- | --- |
-| `~/ai-engineering-harness/autobuild/` (linked as `~/.agents/autobuild`) | Schemas, policy, templates, controller code, docs |
+| `~/ai-engineering-harness/autobuild/` (linked as `~/.agents/autobuild`) | Schemas, policy, provider registry, templates, controller code, docs |
 | `~/ai-engineering-harness/skills/custom/implementation-planning/` | The planner skill |
-| `<project>/.autobuild/config.yaml` | The project's branches, paths, limits, validation, notification and control settings |
+| `<project>/.autobuild/config.yaml` | The project's role → provider assignments, branches, paths, limits, validation, notification and control settings |
 | `<project>/.autobuild/runs/<run-id>/` | Run artifacts (git-ignored), see `ARTIFACT_CONTRACT.md` |
 | `<project>/<paths.roadmap>` | Roadmap and briefs produced by the planner |
 
@@ -102,11 +103,11 @@ Autobuild points at them through `paths` and doesn't copy them.
 | Phase | Adds |
 | --- | --- |
 | 0.1 | This foundation: schemas, policy, state model, contracts, validators, planning skill |
-| 0.2 | Single-implementation runner: worktree/branch creation, non-interactive implementer invocation, tool restrictions |
+| 0.2 | Single-implementation runner: worktree/branch creation, first provider adapters behind `AgentProvider`, tool restrictions |
 | 0.3 | Independent review loop with a hard cycle limit |
 | 0.4 | Browser/E2E evidence through existing browser skills |
 | 0.5 | Roadmap rollover through the autonomy gate |
 | 0.6 | Operations: notification providers, remote stop provider, `/resume`, run history, spend limits |
 
-Related: `AUTONOMY_POLICY.md`, `ARTIFACT_CONTRACT.md`, `SAFETY_MODEL.md`,
+Related: `PROVIDERS.md`, `AUTONOMY_POLICY.md`, `ARTIFACT_CONTRACT.md`, `SAFETY_MODEL.md`,
 `CONTROL_CONTRACT.md`, `NOTIFICATION_CONTRACT.md`, `decisions/`.

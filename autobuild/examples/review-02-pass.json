@@ -4,7 +4,7 @@
   "implementation_id": "EX-1",
   "cycle": 2,
   "status": "PASS",
-  "reviewer": { "agent": "codex", "session_id": "rev-4d21" },
+  "reviewer": { "provider": "codex", "session_id": "rev-4d21" },
   "reviewed_at": "2026-10-03T15:12:00Z",
   "evidence_reviewed": ["brief", "git_diff", "changed_files", "validation_output", "adrs", "implementer_summary"],
   "findings": [
