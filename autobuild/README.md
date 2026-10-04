@@ -47,6 +47,7 @@ autobuild review FILE... | validation FILE...
 autobuild gate FILE --done ID,...       # autonomy gate decision for a brief
 autobuild agents [PROJECT]              # resolved role -> provider assignment
 autobuild run BRIEF [--dry-run] [--yes] [--base BRANCH] [--project DIR]
+autobuild fixture create --implementer ID | list | clean [NAME...|--all] [--legacy PATH...] [--yes]
 ```
 
 `bin/autobuild` resolves symlinks, so `~/.agents/autobuild/bin/autobuild`

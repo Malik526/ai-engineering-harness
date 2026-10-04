@@ -1,0 +1,30 @@
+# Disposable autobuild live-verification fixture. Created by `autobuild fixture create`.
+version: 1
+project:
+  name: Autobuild Fixture
+agents:
+  planner: {provider: ${implementer}}
+  implementer: {provider: ${implementer}}
+  reviewer: {provider: ${implementer}}
+git:
+  protected_branches: [main]
+  branch_prefix: agent/
+  checkpoint_commits: true
+paths:
+  roadmap: docs/roadmap
+  project_state: PROJECT_STATE.md
+  adr_directory: docs/decisions
+  runs_directory: .autobuild/runs
+limits:
+  max_review_cycles: 3
+  max_consecutive_implementations: 5
+  implementer_timeout_seconds: 600
+validation:
+  browser_tool: none
+  require_clean_git_before_start: true
+  commands:
+    - name: content-check
+      kind: test
+      run: grep -qx 'Autobuild 0.2 verification' autobuild-test.txt
+notifications: {enabled: false, provider: console}
+control: {remote_stop_enabled: false, provider: none}

@@ -10,6 +10,10 @@
     autobuild agents [PROJECT]              show which provider fills each role
     autobuild run BRIEF [--project DIR] [--base BRANCH] [--yes] [--dry-run]
                                             run one approved implementation (phase 0.2)
+    autobuild fixture create --implementer ID [--name NAME]   disposable live-test fixture
+    autobuild fixture list                                    fixtures and ownership checks
+    autobuild fixture clean [NAME...|--all] [--legacy PATH...] [--yes]
+                                            remove verified fixtures (dry run without --yes)
 
 Exit status is 0 when everything validates, 1 otherwise.
 """
@@ -23,7 +27,7 @@ from typing import Callable, Optional
 from autobuild.autonomy import evaluate_gate
 from autobuild.config import ConfigError, load_project_config, missing_paths
 from autobuild.implementations import brief_file_errors, load_brief
-from autobuild.paths import EXAMPLES_DIR
+from autobuild.paths import CORE_ROOT, EXAMPLES_DIR
 from autobuild.policy_loader import load_policy
 from autobuild.provider_registry import load_registry
 from autobuild.roles import ROLES
@@ -163,6 +167,51 @@ def _run(brief: Path, project: Optional[Path], base: Optional[str], assume_yes: 
     return 0 if outcome.state["state"] == "COMPLETED" else 1
 
 
+def _fixture(args: argparse.Namespace) -> int:
+    from autobuild import fixtures
+
+    root = fixtures.runtime_root()
+    if args.action == "create":
+        try:
+            path = fixtures.create_fixture(implementer=args.implementer, name=args.name)
+        except fixtures.FixtureError as exc:
+            print(f"FAIL {exc}")
+            return 1
+        print(f"Created fixture {path}")
+        print(f"  cd {path} && {CORE_ROOT / 'bin' / 'autobuild'} run docs/roadmap/V-1.md --dry-run")
+        return 0
+    if args.action == "list":
+        found = fixtures.list_fixtures()
+        print(f"Runtime root: {root}" + ("" if found else " (no fixtures)"))
+        for target in found:
+            state = "owned" if target.safe else "UNVERIFIED: " + "; ".join(target.problems)
+            print(f"  {target.path.name}: {len(target.worktrees)} worktree(s), {state}")
+        return 0
+
+    targets = [fixtures.inspect_legacy(Path(p)) for p in args.legacy]
+    if args.all:
+        targets += fixtures.list_fixtures()
+    targets += [fixtures.inspect_fixture(name) for name in args.names]
+    if not targets:
+        print("Nothing selected: name fixtures, or pass --all or --legacy PATH.")
+        return 1
+    ok = True
+    for target in targets:
+        if not target.safe:
+            ok = False
+            print(f"SKIP {target.path}: " + "; ".join(target.problems))
+            continue
+        items = [target.path, *target.worktrees] + ([target.worktrees_dir] if target.worktrees_dir.exists() else [])
+        if args.yes:
+            fixtures.remove(target)
+            print(f"REMOVED {target.path} (+{len(target.worktrees)} worktree(s))")
+        else:
+            print("WOULD REMOVE " + ", ".join(str(i) for i in items))
+    if not args.yes:
+        print("Dry run: nothing was deleted. Re-run with --yes to remove the verified fixtures above.")
+    return 0 if ok else 1
+
+
 def _show_gate(path: Path, done: str) -> bool:
     errors = brief_file_errors(path)
     if errors:
@@ -200,10 +249,23 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--base", help="branch to start from (default: git.default_base_branch or the first protected branch)")
     p.add_argument("--yes", action="store_true", help="do not ask for confirmation")
     p.add_argument("--dry-run", action="store_true", help="run preflight only")
+    p = sub.add_parser("fixture")
+    fixture_sub = p.add_subparsers(dest="action", required=True)
+    f = fixture_sub.add_parser("create")
+    f.add_argument("--implementer", required=True, help="registry provider id to assign to every role")
+    f.add_argument("--name")
+    fixture_sub.add_parser("list")
+    f = fixture_sub.add_parser("clean")
+    f.add_argument("names", nargs="*", help="fixture names under the runtime root")
+    f.add_argument("--all", action="store_true", help="every fixture under the runtime root")
+    f.add_argument("--legacy", nargs="+", default=[], metavar="PATH", help="pre-runtime fixture folders (strict signature check)")
+    f.add_argument("--yes", action="store_true", help="actually delete (default is a dry run)")
     p = sub.add_parser("agents")
     p.add_argument("project", nargs="?", type=Path, default=Path.cwd())
     args = parser.parse_args(argv)
 
+    if args.command == "fixture":
+        return _fixture(args)
     if args.command == "run":
         return _run(args.brief, args.project, args.base, args.yes, args.dry_run)
     if args.command == "check":

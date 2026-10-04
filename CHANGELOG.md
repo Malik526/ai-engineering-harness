@@ -2,6 +2,27 @@
 
 ## 2026-10-04
 
+### Autobuild — Consolidated Live-Test Fixtures and Safe Cleanup
+
+- Disposable live-verification fixtures now live under one git-ignored
+  directory, `autobuild/.test-runtime/` (or `AUTOBUILD_TEST_RUNTIME`), with
+  worktrees in sibling `<name>.worktrees`. No more top-level home folders.
+- `autobuild fixture create --implementer ID` builds the standard V-1
+  fixture (templates in `templates/fixture/`) and writes an ownership marker
+  to `.git/autobuild-fixture.json`. `autobuild fixture list` shows each
+  fixture's verification status.
+- `autobuild fixture clean [NAME...|--all] [--yes]` is a dry run by default.
+  It deletes only fixtures whose marker, location, worktree registrations
+  and worktree directory all verify, and refuses symlinks, copies, unmarked
+  repos, worktrees outside the runtime root, and unknown content.
+  `--legacy PATH` handles marker-less `~/autobuild-fixture-*` folders through
+  a stricter signature check.
+- Validation: `pytest` 166 passed (11 new fixture tests, including each
+  refusal). Live: a Claude Code run from a runtime fixture completed with a
+  checkpoint commit, the fixture stayed git-ignored, and `clean --all --yes`
+  removed it and its worktree. The two legacy home fixtures pass `--legacy`
+  verification (dry run); deleting them is left to the human.
+
 ### Policies — Always-On Documentation Reconciliation
 
 - Root cause of a missed documentation update: after Codex live verification

@@ -15,3 +15,6 @@ credentials*.json
 # Agent run output, if a harness tool is ever run from inside this repo.
 .autobuild/runs/*
 !.autobuild/runs/.gitkeep
+
+# Autobuild disposable live-test fixtures (autobuild fixture create/clean).
+autobuild/.test-runtime/

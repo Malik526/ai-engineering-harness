@@ -123,6 +123,47 @@ Every run ends with a summary (also saved as `report.md`): implementation,
 provider, status, branch, worktree, files changed, controller validation,
 commit, known issues reported by the implementer, and the human's next step.
 
+## Live Verification Fixtures
+
+Live provider checks run against disposable fixture repositories, never a
+real project. All fixtures live in one ignored directory,
+`autobuild/.test-runtime/` (override with `AUTOBUILD_TEST_RUNTIME`), each with
+its worktrees in the sibling `<name>.worktrees`:
+
+```bash
+autobuild fixture create --implementer codex     # → .test-runtime/live-<date>-codex
+cd <fixture> && autobuild run docs/roadmap/V-1.md --yes
+autobuild fixture list
+autobuild fixture clean --all                    # dry run: shows what would go
+autobuild fixture clean --all --yes              # delete
+```
+
+A fixture is a fresh git repo on `main` with the standard V-1 brief
+("create `autobuild-test.txt` containing `Autobuild 0.2 verification`"),
+a controller validation command, checkpoint commits on, and the chosen
+provider in every role. Creation writes an ownership marker into
+`.git/autobuild-fixture.json`, which is never tracked and never dirties the
+tree.
+
+`clean` is a dry run unless `--yes` is given. It deletes a fixture only when
+all of these hold:
+
+- it's a real directory (not a symlink) directly under the runtime root;
+- it has its own `.git` directory and a marker naming autobuild as owner, live verification as purpose, and this exact path (a copied fixture fails);
+- every registered worktree sits in its own `<name>.worktrees`;
+- that directory holds nothing except those worktrees.
+
+Anything else is reported as `SKIP` with the reasons, and nothing is touched.
+
+Fixtures created before this existed (`~/autobuild-fixture-*`, no marker)
+are accepted only through `--legacy PATH`, which instead requires:
+
+- an `autobuild-fixture*` name;
+- project name `Autobuild Fixture` and the V-1 brief;
+- a single root commit named `fixture`;
+- no git remote;
+- the same worktree containment checks.
+
 ## Environment Notes
 
 - **Snap-packaged CLIs** (e.g. Codex installed with snap) run with a private
