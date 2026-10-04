@@ -2,6 +2,49 @@
 
 ## 2026-10-04
 
+### Policies — Always-On Documentation Reconciliation
+
+- Root cause of a missed documentation update: after Codex live verification
+  passed on CLI 0.160.0, the agent reported it but asked whether to update the
+  changelog. Policy loading was correct. All six global policies reach Claude
+  Code through the `~/.agents` symlinks (verified live). The policy was
+  ambiguous: the changelog checklist covered only "code-changing" tasks, the
+  "incidental exploration/analysis" exemption could cover verification, and
+  doc updates were tied to "when the task requests it". It also didn't cover
+  facts recorded in a different repository from where the work ran.
+- Reproduced with a controlled cross-repo fixture (verification in a
+  disposable repo, failing status recorded in the system repo, "report
+  whether…" prompt). Old policy: 2/2 sessions saw the stale docs and left
+  them ("you only asked me to run the check"). New policy: 2/2 updated the
+  changelog and status automatically, without Autobuild.
+- `DOCUMENTATION.md`: new always-on "Documentation Reconciliation" section
+  (status, results, limitations, decisions; target the system the fact is
+  about, wherever the work ran; new dated entries rather than rewrites; don't
+  ask for obvious updates; completion checklist). The changelog checklist and
+  exemption now cover verification-only tasks.
+- `DOCUMENTATION.md` also held a pasted Claude auto-memory record (report
+  formatting), predating the harness. It's replaced by a vendor-neutral
+  Completion Notes bullet, and the duplicate memory file is removed.
+- Codex adapter `~/.codex/AGENTS.md` (outside this repo) was missing
+  `EXECUTION.md`; reference added.
+- New `scripts/setup/audit_instructions.py`: read-only check that every
+  canonical policy is symlinked into `~/.agents`, referenced by both runtime
+  adapters, and free of memory records. Negative-tested against a fake home
+  with the old drift.
+- Known remaining gap: commit behavior after a doc update varies (one session
+  commits, another asks), reflecting `GIT.md`'s "if the runtime is permitted
+  to commit" wording.
+
+### Autobuild 0.2 — Codex Live Verification Passes
+
+- Supersedes the 0.2 entry's "Live Codex … failed upstream" note. With Codex
+  CLI 0.160.0 (npm install, authenticated), a disposable-fixture run with
+  `implementer: codex` completed `READY → IMPLEMENTING → VALIDATING →
+  COMPLETED` in 52 s. Isolated branch and worktree, valid structured report
+  and session id, controller-captured diff, controller validation passed,
+  checkpoint commit `autobuild(V-1): …` on the run branch, `main` untouched.
+- Both registered providers are now verified live end to end.
+
 ### Autobuild 0.2 — Single Implementation Runner
 
 - `autobuild run <brief>` takes one approved GREEN brief through preflight →

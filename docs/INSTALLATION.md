@@ -43,6 +43,17 @@ Delete the backup once both runtimes have been checked.
 The script never overwrites a `CONFLICT`. Its check mode exits non-zero
 unless every entry is `OK`, so it doubles as a health check.
 
+## Instruction-Chain Audit
+
+```bash
+python3 ~/ai-engineering-harness/scripts/setup/audit_instructions.py
+```
+
+This is a read-only check that every policy in `policies/global/` is
+symlinked into `~/.agents/`, imported by `~/.claude/CLAUDE.md` and
+referenced by `~/.codex/AGENTS.md`, and that no policy contains a pasted
+agent-memory record. Run it after adding a policy or editing an adapter.
+
 ## Adding a Link
 
 Add a `<source> <target>` line to `scripts/setup/links.manifest`, then run

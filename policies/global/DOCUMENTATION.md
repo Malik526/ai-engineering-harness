@@ -24,8 +24,46 @@ This file is the vendor-neutral source of truth for documentation, comments, and
 
 - Provide a clear implementation summary after completing a task.
 - State what changed, what was built, and what was skipped or deferred.
-- Update relevant project-local documentation or changelogs when the task requests it or when an established local rule requires it.
+- Reconcile documentation before reporting completion (see Documentation
+  Reconciliation below); never make an obvious required update conditional on
+  the user asking for it.
 - Preserve project-local documentation boundaries; do not move historical notes into unrelated global files.
+- Write completion reports and summaries as normal Markdown (headings, bold
+  labels, lists). Do not wrap a prose report in a fenced code block, even when
+  a brief shows its report template inside one; fences are for code, paths,
+  and terminal output.
+
+## Documentation Reconciliation (Always On)
+
+This applies to every task, with or without an orchestrator such as Autobuild,
+including verification-only, investigation, and "report whether…" tasks.
+
+When the work changes an authoritative fact — implementation status, an
+evaluation or verification result (including FAIL → PASS or PASS → FAIL), a
+known limitation or assumption (resolved, invalidated, or newly found), an
+architectural decision, or documented behavior — update the authoritative
+documentation for that fact automatically, as part of the same task:
+
+- Target the documentation of the system the fact is about, even when the
+  work ran somewhere else (a fixture, sandbox, worktree, or another repository).
+- Typical targets: the changelog, project state, evaluations, ADRs, and the
+  docs that state the limitation or behavior.
+- Record a changed result as a new dated entry that supersedes the old one;
+  do not rewrite the historical entry.
+- Do not ask whether to make an obvious required update. Ask only when the
+  correct target is genuinely ambiguous, and say what the ambiguity is.
+- A request to "report" or "verify" defines what to tell the user; it does
+  not exempt the documentation update.
+
+Before declaring any implementation, fix, verification, migration, or
+architectural task complete:
+
+1. reconcile code changes with project state;
+2. reconcile implementation status and results with the changelog;
+3. update evaluations if results changed;
+4. record architectural decisions where applicable;
+5. update other authoritative documentation affected by the work;
+6. then report completion, listing the documentation updated.
 
 # Changelog Policy
 
@@ -41,6 +79,8 @@ architecture changes, integrations, schema/data changes, significant
 configuration changes, security changes, operational changes, or meaningful
 documentation contracts. Incidental exploration, analysis, or formatting-only
 work does not require an entry unless project-local policy says otherwise.
+Verification or evaluation that changes a recorded result, status, or
+limitation is not incidental: record it.
 
 Structure entries as `date -> distinct change set -> concise details`.
 
@@ -60,7 +100,8 @@ Structure entries as `date -> distinct change set -> concise details`.
   unrelated same-day changes into one ambiguous flat list unless the project
   explicitly requires it.
 
-Before completing a code-changing task:
+Before completing any task that changes code or an authoritative project
+fact (including verification-only tasks):
 
 1. inspect the canonical changelog;
 2. add or update the relevant dated change-set section for the completed
@@ -71,19 +112,3 @@ Before completing a code-changing task:
 
 If no changelog exists in an actively maintained code repository, create one
 unless the project explicitly opts out.
-
-## feedback-report-formatting
-
-description: "User wants task summaries/reports as normal chat markdown, not dumped into a fenced code block"
-metadata: 
-  node_type: memory
-  type: feedback
-  originSessionId: 6db1a9e7-f7d3-4616-9806-08799321a245
-  modified: 2026-09-18T04:56:38.896Z
----
-
-Do not put final task summaries or structured reports (e.g. "Required Final Report" style output) inside a fenced ``` code block. Write them as normal chat markdown instead — headers, bold labels, bullet lists, short paragraphs. This applies to EVERY summary/report in chat, not just the first one after the feedback was given — re-check this before sending any milestone-report-shaped message, since the habit of copying a brief's fenced template verbatim is strong and has recurred at least once after this feedback was already saved (2026-09-18, milestone 2.1.7 final report).
-
-**Why:** the user said monospace-block reports are hard to read because they have no real formatting (no bold, no distinct headers, everything the same weight).
-
-**How to apply:** even when a task's own instructions specify a literal "report format" template with a code-fenced skeleton (common in this user's milestone-style briefs), translate that structure into normal markdown — e.g. a field like `Overall result: COMPLETE` becomes a bolded label + value in prose/list form, not a line inside a ``` block. Code fences are still fine for actual code, file paths, terminal output, or short inline literals — just not for wrapping an entire prose summary/report. Before sending a "Required Final Report"-style message, scan it for a fenced block wrapping prose fields and convert it.

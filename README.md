@@ -32,7 +32,8 @@ files through symlinks. Nothing here belongs to a single application.
 policies/global/      global policies, linked to ~/.agents/<NAME>.md
 skills/custom/        custom skills (implementation-planning)
 autobuild/            autobuild framework, linked to ~/.agents/autobuild
-scripts/setup/        links.manifest + install.py (check / apply / adopt links)
+scripts/setup/        links.manifest + install.py (check / apply / adopt links),
+                      audit_instructions.py (verify the policy → adapter chain)
 docs/                 ARCHITECTURE, INSTALLATION, SKILL_MANAGEMENT
 CHANGELOG.md
 ```
