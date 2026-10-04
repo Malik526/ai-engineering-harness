@@ -6,6 +6,8 @@
   "branch": "agent/EX-1-caption-length",
   "parent_branch": "main",
   "worktree": "../content-automation.worktrees/EX-1",
+  "base_commit": "47f47d3c0e9b5a1d2f3e4c5b6a7980112233aabb",
+  "review_mode": "independent",
   "brief_sha256": "5f2b6c1e0d9a4b7c8e3f1a2d4c6b8e0f1a3c5e7d9b1f3a5c7e9d1b3f5a7c9e1d",
   "started_at": "2026-10-03T14:00:00Z",
   "updated_at": "2026-10-03T15:12:40Z",

@@ -17,24 +17,33 @@ the review.
 
 | Path | Authority | Producer | Contents |
 | --- | --- | --- | --- |
-| `brief.md` | authoritative_evidence | planner | Human-approved brief, frozen at run start; hash in `state.json` |
-| `state.json` | decision_record | controller | Current run state (`run-state.schema.json`) |
-| `implementation/diff.patch` | authoritative_evidence | controller | `git diff` of the run branch against its parent |
-| `implementation/changed-files.txt` | authoritative_evidence | controller | `git diff --name-status` against the parent |
-| `implementation/validation.json` | authoritative_evidence | controller | Commands the controller re-ran, with exit codes (`validation.schema.json`) |
-| `implementation/summary.md` | supplemental | implementer | Implementer's account of the change (`templates/implementation-summary.md`) |
+| `brief.md` | authoritative_evidence | planner | Human-approved brief, frozen at run start; hash in state.json |
+| `state.json` | decision_record | controller | Current run state (run-state.schema.json) |
+| `report.md` | supplemental | controller | Completion summary derived from the records above |
+| `implementation/prompt.md` | authoritative_evidence | controller | Exact input the implementer received |
+| `implementation/git.json` | authoritative_evidence | controller | Base/head commits, snapshot tree, git status, untracked files |
+| `implementation/diff.patch` | authoritative_evidence | controller | Binary-safe diff of the worktree snapshot against the base commit |
+| `implementation/changed-files.txt` | authoritative_evidence | controller | Name-status of the same snapshot |
+| `implementation/result.json` | supplemental | implementer | How the provider process ended, plus the implementer's report (implementation-result.schema.json) |
+| `implementation/summary.md` | supplemental | implementer | The implementer's report rendered as Markdown |
+| `validation/results.json` | authoritative_evidence | controller | Commands the controller ran, with status and exit codes (validation.schema.json) |
+| `validation/logs/` | authoritative_evidence | controller | stdout/stderr of every validation command |
 | `browser/results.json` | authoritative_evidence | browser_tool | Browser assertions and console errors |
-| `browser/screenshots/` | authoritative_evidence | browser_tool | Screenshots referenced by `results.json` |
-| `review/review-NN.json` | decision_record | reviewer | Structured review result (`review.schema.json`) |
-| `review/review-NN.md` | supplemental | reviewer | Reviewer's narrative for the same cycle (`templates/review.md`) |
-| `logs/` | supplemental | controller | Raw agent and command logs |
+| `browser/screenshots/` | authoritative_evidence | browser_tool | Screenshots referenced by results.json |
+| `review/review-NN.json` | decision_record | reviewer | Structured review result (review.schema.json) |
+| `review/review-NN.md` | supplemental | reviewer | Reviewer's narrative for the same cycle |
+| `logs/controller.log` | supplemental | controller | Controller step log |
+| `logs/provider.log` | supplemental | controller | Raw provider stdout |
+| `logs/provider.stderr.log` | supplemental | controller | Raw provider stderr |
+| `guard/bin/git` | supplemental | controller | Per-run git guard placed first on the agent's PATH |
 
 `NN` is the two-digit review cycle (`review-01`, `review-02`, …).
 
 ## Rules
 
-- **Validation is re-run, not reported.** `validation.json` counts as authoritative evidence only when `producer` is `controller`. Test results reported by the implementer are supplemental, and the notification marks them that way.
+- **Validation is re-run, not reported.** `validation/results.json` counts as authoritative evidence only when `producer` is `controller`. The implementer's `tests_reported` in `result.json` is supplemental, and the notification marks it that way.
 - **The brief is frozen.** The controller copies the approved brief into the run and records its SHA-256 as `brief_sha256`. The reviewer judges that copy. Edits to the roadmap brief during a run don't affect it.
-- **Diffs come from git.** `diff.patch` and `changed-files.txt` are produced by the controller from the repository, never written by an agent.
+- **Diffs come from git.** `diff.patch`, `changed-files.txt` and `git.json` are produced by the controller from a snapshot of the worktree (taken through a temporary index, before validation runs), never written by an agent. The checkpoint commit is built from exactly that snapshot's tree.
+- **The prompt is recorded.** `implementation/prompt.md` is the exact input the implementer received, so a reviewer can tell an implementation error from an instruction error.
 - **Review status is structured.** Only `review-NN.json` `status` moves the state machine. PASS can't carry `blocker` or `major` findings, REVISE must carry at least one finding, and BLOCKED must give a `blocked_reason`. Every review must list `brief` and `git_diff` in `evidence_reviewed`.
 - **Runs are local.** `runs/` is git-ignored in projects. Logs may contain environment details and shouldn't be committed.

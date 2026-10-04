@@ -56,9 +56,9 @@ The policy files describe intent. They don't confine a running agent on their
 own. Real enforcement is layered, so no single layer depends on a model
 cooperating.
 
-1. **Policy (0.1, this phase).** The schemas, `policy/*.yaml` and validators reject unsafe configuration and state.
-2. **Agent confinement (0.2).** The controller runs agents non-interactively inside the worktree, with tool allow/deny lists, a pre-tool hook that refuses protected-branch, merge, force-push and out-of-scope commands, sandboxing where the provider supports it, and turn limits.
-3. **Controller checks (0.2+).** Before and after each run, the controller compares the tips of the protected branches. Any change fails the run and is reported as `protected_branches.modified: true`.
+1. **Policy (0.1).** The schemas, `policy/*.yaml` and validators reject unsafe configuration and state.
+2. **Agent confinement (0.2, implemented).** Agents run non-interactively inside their worktree. A per-run git shim on PATH and, for Claude Code, a PreToolUse hook apply one git allowlist (`autobuild/command_guard.py`): read-only git only; agents never commit, push, merge, rebase, reset, or move branches. The hook also refuses file edits outside the worktree. Codex runs in its `workspace-write` sandbox. Timeouts bound every invocation. Details: `RUNNER.md`.
+3. **Controller checks (0.2, implemented).** The controller's own git writes refuse protected branches (`GitClient`). Protected branch tips are compared before and after the agent and after the checkpoint commit, and any change fails the run as unrecoverable. Runs also fail if the agent committed, left its branch, or produced secret-like files.
 4. **Server-side backstop (human action, recommended now).** Turn on GitHub branch protection for `main` in every project autobuild drives: no direct pushes, no force pushes.
 5. **Out-of-band stop.** See `CONTROL_CONTRACT.md`. Stopping never depends on an agent.
 

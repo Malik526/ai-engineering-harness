@@ -25,15 +25,23 @@ class ArtifactSpec:
 RUN_ARTIFACTS: tuple[ArtifactSpec, ...] = (
     ArtifactSpec("brief.md", EVIDENCE, "planner", "Human-approved brief, frozen at run start; hash in state.json"),
     ArtifactSpec("state.json", DECISION, "controller", "Current run state (run-state.schema.json)"),
-    ArtifactSpec("implementation/diff.patch", EVIDENCE, "controller", "git diff of the run branch against its parent"),
-    ArtifactSpec("implementation/changed-files.txt", EVIDENCE, "controller", "git diff --name-status against the parent"),
-    ArtifactSpec("implementation/validation.json", EVIDENCE, "controller", "Commands the controller re-ran, with exit codes"),
-    ArtifactSpec("implementation/summary.md", SUPPLEMENTAL, "implementer", "Implementer's account of the change"),
+    ArtifactSpec("report.md", SUPPLEMENTAL, "controller", "Completion summary derived from the records above"),
+    ArtifactSpec("implementation/prompt.md", EVIDENCE, "controller", "Exact input the implementer received"),
+    ArtifactSpec("implementation/git.json", EVIDENCE, "controller", "Base/head commits, snapshot tree, git status, untracked files"),
+    ArtifactSpec("implementation/diff.patch", EVIDENCE, "controller", "Binary-safe diff of the worktree snapshot against the base commit"),
+    ArtifactSpec("implementation/changed-files.txt", EVIDENCE, "controller", "Name-status of the same snapshot"),
+    ArtifactSpec("implementation/result.json", SUPPLEMENTAL, "implementer", "How the provider process ended, plus the implementer's report (implementation-result.schema.json)"),
+    ArtifactSpec("implementation/summary.md", SUPPLEMENTAL, "implementer", "The implementer's report rendered as Markdown"),
+    ArtifactSpec("validation/results.json", EVIDENCE, "controller", "Commands the controller ran, with status and exit codes (validation.schema.json)"),
+    ArtifactSpec("validation/logs/", EVIDENCE, "controller", "stdout/stderr of every validation command"),
     ArtifactSpec("browser/results.json", EVIDENCE, "browser_tool", "Browser assertions and console errors"),
     ArtifactSpec("browser/screenshots/", EVIDENCE, "browser_tool", "Screenshots referenced by results.json"),
     ArtifactSpec("review/review-NN.json", DECISION, "reviewer", "Structured review result (review.schema.json)"),
     ArtifactSpec("review/review-NN.md", SUPPLEMENTAL, "reviewer", "Reviewer's narrative for the same cycle"),
-    ArtifactSpec("logs/", SUPPLEMENTAL, "controller", "Raw agent and command logs"),
+    ArtifactSpec("logs/controller.log", SUPPLEMENTAL, "controller", "Controller step log"),
+    ArtifactSpec("logs/provider.log", SUPPLEMENTAL, "controller", "Raw provider stdout"),
+    ArtifactSpec("logs/provider.stderr.log", SUPPLEMENTAL, "controller", "Raw provider stderr"),
+    ArtifactSpec("guard/bin/git", SUPPLEMENTAL, "controller", "Per-run git guard placed first on the agent's PATH"),
 )
 
 

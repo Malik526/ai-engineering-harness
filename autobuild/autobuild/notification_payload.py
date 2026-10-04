@@ -26,7 +26,8 @@ def _validation_counts(validation: Optional[dict[str, Any]]) -> dict[str, Any]:
         if command["kind"] in ("test", "browser"):
             counts[f"{prefix}_passed"] += command.get("passed", 0)
             counts[f"{prefix}_failed"] += command.get("failed", 0)
-        if command["exit_code"] != 0:
+        status = command.get("status") or ("passed" if command["exit_code"] == 0 else "failed")
+        if status in ("failed", "timed_out", "error"):
             counts["failed_commands"].append(command["name"])
     return counts
 

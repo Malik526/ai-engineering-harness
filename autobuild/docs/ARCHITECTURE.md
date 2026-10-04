@@ -79,6 +79,8 @@ Defined in `autobuild/states.py`, mirrored in `schemas/run-state.schema.json`.
 Transitions:
 
 - Forward: `IDLE → PLANNING → READY → IMPLEMENTING → VALIDATING → REVIEWING → PASSED → COMPLETED`.
+- Implementation-only runs (phase 0.2, `review_mode: none`): `READY → IMPLEMENTING → VALIDATING → COMPLETED`. The schema forbids such a run from entering review states or claiming a review; it completes *unreviewed* and waits for the human.
+- Setup failures before implementation: `READY → FAILED`.
 - Revision loop: `VALIDATING → REVISING` (validation failed) and `REVIEWING → REVISING → VALIDATING` (findings). A fix is always re-validated before it is re-reviewed.
 - Exceeding `limits.max_review_cycles` moves the run to `HUMAN_BLOCKED`, never into another loop.
 - `STOP_REQUESTED` can be entered from any working or waiting state, and leads only to `STOPPED`.
@@ -102,12 +104,12 @@ Autobuild points at them through `paths` and doesn't copy them.
 
 | Phase | Adds |
 | --- | --- |
-| 0.1 | This foundation: schemas, policy, state model, contracts, validators, planning skill |
-| 0.2 | Single-implementation runner: worktree/branch creation, first provider adapters behind `AgentProvider`, tool restrictions |
+| 0.1 | Foundation: schemas, policy, state model, contracts, validators, planning skill |
+| 0.2 | **Done.** Single-implementation runner (`autobuild run`): preflight, worktree/branch isolation, Claude Code and Codex adapters, command guard, controller validation, checkpoint commit. See `RUNNER.md` |
 | 0.3 | Independent review loop with a hard cycle limit |
 | 0.4 | Browser/E2E evidence through existing browser skills |
 | 0.5 | Roadmap rollover through the autonomy gate |
 | 0.6 | Operations: notification providers, remote stop provider, `/resume`, run history, spend limits |
 
-Related: `PROVIDERS.md`, `AUTONOMY_POLICY.md`, `ARTIFACT_CONTRACT.md`, `SAFETY_MODEL.md`,
+Related: `RUNNER.md`, `PROVIDERS.md`, `AUTONOMY_POLICY.md`, `ARTIFACT_CONTRACT.md`, `SAFETY_MODEL.md`,
 `CONTROL_CONTRACT.md`, `NOTIFICATION_CONTRACT.md`, `decisions/`.

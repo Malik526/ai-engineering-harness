@@ -55,6 +55,20 @@
           "description": "Prefix for every automation branch, e.g. 'agent/'. Must end with '/'.",
           "type": "string",
           "pattern": "^[a-z0-9][a-z0-9._-]*/$"
+        },
+        "default_base_branch": {
+          "description": "Branch new runs start from when `autobuild run --base` is not given. Defaults to the first protected branch.",
+          "type": "string",
+          "minLength": 1
+        },
+        "worktree_root": {
+          "description": "Directory that holds run worktrees (absolute, ~, or relative to the project root). Must be outside the project. Defaults to '<project>.worktrees' next to the project.",
+          "type": "string",
+          "minLength": 1
+        },
+        "checkpoint_commits": {
+          "description": "Whether the controller may create one checkpoint commit on the run branch after validation passes. Never pushes. Defaults to false.",
+          "type": "boolean"
         }
       }
     },
@@ -76,7 +90,11 @@
       "required": ["max_review_cycles", "max_consecutive_implementations"],
       "properties": {
         "max_review_cycles": { "type": "integer", "minimum": 1, "maximum": 10 },
-        "max_consecutive_implementations": { "type": "integer", "minimum": 1, "maximum": 50 }
+        "max_consecutive_implementations": { "type": "integer", "minimum": 1, "maximum": 50 },
+        "implementer_timeout_seconds": {
+          "description": "Wall-clock limit for one implementer invocation. Defaults to 3600.",
+          "type": "integer", "minimum": 60, "maximum": 86400
+        }
       }
     },
     "validation": {
@@ -85,7 +103,12 @@
       "required": ["browser_tool", "require_clean_git_before_start"],
       "properties": {
         "browser_tool": { "enum": ["none", "playwright", "agent-browser"] },
-        "require_clean_git_before_start": { "type": "boolean" }
+        "require_clean_git_before_start": { "type": "boolean" },
+        "commands": {
+          "description": "Commands the controller runs in the worktree after implementation. Only these results are authoritative validation evidence.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/validation_command" }
+        }
       }
     },
     "notifications": {
@@ -110,6 +133,27 @@
     }
   },
   "$defs": {
+    "validation_command": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "kind", "run"],
+      "properties": {
+        "name": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$" },
+        "kind": { "enum": ["setup", "test", "lint", "typecheck", "build", "other"] },
+        "run": {
+          "description": "Shell command. ${PROJECT_ROOT} and ${WORKTREE} are substituted.",
+          "type": "string", "minLength": 1
+        },
+        "cwd": { "$ref": "#/$defs/relative_path" },
+        "env": { "type": "object", "additionalProperties": { "type": "string" } },
+        "timeout_seconds": { "type": "integer", "minimum": 1, "maximum": 86400 },
+        "required": { "description": "A failing required command fails the run. Defaults to true.", "type": "boolean" },
+        "paths": {
+          "description": "Run only when a changed file matches one of these fnmatch patterns; otherwise recorded as skipped.",
+          "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
     "provider_id": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,31}$" },
     "role_assignment": {
       "type": "object",

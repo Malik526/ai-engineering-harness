@@ -1,8 +1,10 @@
 # Autobuild
 
 The deterministic control plane for planner → implementer → independent
-reviewer workflows. **Phase 0.1:** contracts and validators only. Nothing here
-invokes an agent yet.
+reviewer workflows. **Phase 0.2:** contracts and validators, plus the single
+implementation runner (`autobuild run`), which takes one approved brief
+through an isolated worktree, the configured implementer, and
+controller-owned validation, then stops for the human (`docs/RUNNER.md`).
 
 Read `docs/ARCHITECTURE.md` first.
 
@@ -10,7 +12,8 @@ Read `docs/ARCHITECTURE.md` first.
 
 ```text
 autobuild/        Python package: states, autonomy gate, safety checks, artifact
-                  contract, stop interface, notification payload/rendering, CLI
+                  contract, stop interface, notifications, preflight, runner, CLI
+autobuild/adapters/  provider adapters (the only provider-specific code)
 schemas/          JSON Schemas (config, implementation, run-state, review,
                   validation, notification)
 policy/           autonomy.yaml, safety.yaml (data the controller enforces)
@@ -18,7 +21,7 @@ providers/        registry.yaml: the only place concrete agent providers are nam
 templates/        implementation brief, implementation summary, review,
                   notification body, starter project config
 examples/         GREEN / YELLOW / RED briefs, run state, reviews, validation
-docs/             ARCHITECTURE, PROVIDERS, AUTONOMY_POLICY, ARTIFACT_CONTRACT, SAFETY_MODEL,
+docs/             ARCHITECTURE, RUNNER, PROVIDERS, AUTONOMY_POLICY, ARTIFACT_CONTRACT, SAFETY_MODEL,
                   CONTROL_CONTRACT, NOTIFICATION_CONTRACT, decisions/
 tests/            pytest suite, including doc ↔ code consistency checks
 bin/autobuild     CLI wrapper using this directory's .venv
@@ -43,6 +46,7 @@ autobuild state FILE [--project DIR]    # validate a run state
 autobuild review FILE... | validation FILE...
 autobuild gate FILE --done ID,...       # autonomy gate decision for a brief
 autobuild agents [PROJECT]              # resolved role -> provider assignment
+autobuild run BRIEF [--dry-run] [--yes] [--base BRANCH] [--project DIR]
 ```
 
 `bin/autobuild` resolves symlinks, so `~/.agents/autobuild/bin/autobuild`

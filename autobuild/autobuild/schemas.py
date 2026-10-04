@@ -14,7 +14,10 @@ from jsonschema.exceptions import ValidationError
 
 from autobuild.paths import SCHEMA_DIR
 
-SCHEMA_NAMES = ("config", "implementation", "run-state", "review", "validation", "notification")
+SCHEMA_NAMES = (
+    "config", "implementation", "run-state", "review", "validation", "notification",
+    "implementation-report", "implementation-result",
+)
 
 
 @lru_cache(maxsize=None)

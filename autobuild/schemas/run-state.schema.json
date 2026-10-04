@@ -7,7 +7,7 @@
   "additionalProperties": false,
   "required": [
     "schema_version", "run_id", "implementation_id", "state", "branch", "parent_branch",
-    "worktree", "started_at", "updated_at", "review_cycle", "agent_sessions",
+    "worktree", "base_commit", "review_mode", "started_at", "updated_at", "review_cycle", "agent_sessions",
     "last_commit", "next_implementation", "stop_requested", "failure"
   ],
   "properties": {
@@ -27,6 +27,28 @@
     "branch": { "type": ["string", "null"], "minLength": 1 },
     "parent_branch": { "type": ["string", "null"], "minLength": 1 },
     "worktree": { "type": ["string", "null"], "minLength": 1 },
+    "base_commit": {
+      "description": "Commit the run branch was created from.",
+      "type": ["string", "null"],
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "review_mode": {
+      "description": "none = implementation-only run (phase 0.2), ends unreviewed and waits for the human; independent = the run must pass a fresh reviewer before completing.",
+      "enum": ["none", "independent"]
+    },
+    "history": {
+      "description": "Every state the run entered, in order.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["state", "at"],
+        "properties": {
+          "state": { "type": "string" },
+          "at": { "$ref": "#/$defs/timestamp" }
+        }
+      }
+    },
     "brief_sha256": {
       "description": "Hash of the frozen runs/<run-id>/brief.md, so the reviewer can confirm it judged the brief the human approved.",
       "type": ["string", "null"],
@@ -104,13 +126,19 @@
         "properties": {
           "branch": { "type": "string" },
           "parent_branch": { "type": "string" },
-          "worktree": { "type": "string" }
+          "worktree": { "type": "string" },
+          "base_commit": { "type": "string" }
         }
       }
     },
     {
       "description": "Nothing passes without at least one independent review.",
-      "if": { "properties": { "state": { "enum": ["PASSED", "COMPLETED"] } } },
+      "if": {
+        "anyOf": [
+          { "properties": { "state": { "const": "PASSED" } } },
+          { "properties": { "state": { "const": "COMPLETED" }, "review_mode": { "const": "independent" } } }
+        ]
+      },
       "then": {
         "properties": {
           "review_cycle": { "minimum": 1 },
@@ -119,8 +147,9 @@
       }
     },
     {
-      "if": { "properties": { "state": { "const": "COMPLETED" } } },
-      "then": { "properties": { "last_commit": { "type": "string" } } }
+      "description": "An unreviewed run cannot have entered review states.",
+      "if": { "properties": { "review_mode": { "const": "none" } } },
+      "then": { "properties": { "state": { "not": { "enum": ["REVIEWING", "REVISING", "PASSED"] } }, "review_cycle": { "const": 0 } } }
     },
     {
       "if": { "properties": { "state": { "const": "FAILED" } } },

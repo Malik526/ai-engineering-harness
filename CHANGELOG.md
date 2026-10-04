@@ -1,5 +1,54 @@
 # AI Engineering Harness — Changelog
 
+## 2026-10-04
+
+### Autobuild 0.2 — Single Implementation Runner
+
+- `autobuild run <brief>` takes one approved GREEN brief through preflight →
+  isolated branch and worktree → configured implementer → git evidence →
+  controller validation → optional checkpoint commit, then stops for the
+  human. Worktrees are always kept. `--dry-run` runs preflight only.
+- Preflight (`preflight.py`) only reads and fails with every issue listed:
+  config, brief, autonomy gate (dependencies from sibling briefs), configured
+  provider health (never substituted), git state, protected-branch policy,
+  paths, conflicts, validation-command availability.
+- Provider adapters: `adapters/claude.py` (`claude -p`, JSON output, schema,
+  controller-assigned session id, guard hook) and `adapters/codex.py`
+  (`codex exec`, workspace-write sandbox, output schema, JSONL session id),
+  on a shared `SubprocessAdapter` (health check, start, get_result,
+  terminate, timeouts, process-group kill). The registry names each adapter.
+  Core code stays provider-free; the leak test now covers every module
+  outside `adapters/`.
+- Guards: controller `GitClient` refuses protected-branch writes; per-run git
+  shim and Claude PreToolUse hook enforce a read-only git allowlist for agents
+  and confine Claude's file edits to the worktree; protected refs verified
+  before and after; runs fail on agent commits, branch changes, no changes,
+  or secret-like files.
+- Evidence: snapshot through a temporary index (`git.json`,
+  `changed-files.txt`, `diff.patch`) taken before validation; the checkpoint
+  commit (`autobuild(<id>): <title>`) is built from that exact tree.
+- Controller validation from `validation.commands` (substitution, cwd, env,
+  timeout, required, path filters); `browser_required` stops at
+  HUMAN_BLOCKED. Ctrl-C stops the run (STOP_REQUESTED → STOPPED).
+- Contracts: config gains `validation.commands`, `git.checkpoint_commits`,
+  `git.default_base_branch`, `git.worktree_root` and
+  `limits.implementer_timeout_seconds`. Run state gains `base_commit`,
+  `review_mode` and `history`. `READY → FAILED` and, for unreviewed runs
+  only, `VALIDATING → COMPLETED` are added. New schemas
+  `implementation-report` and `implementation-result`. Artifact layout:
+  `implementation/{prompt,result,summary,git,diff,changed-files}` and
+  `validation/{results.json,logs/}`.
+- Docs: new `RUNNER.md`; ARCHITECTURE, ARTIFACT_CONTRACT, SAFETY_MODEL and
+  PROVIDERS updated.
+- Fixes found by the new tests: bare `git stash` was allowed; shell builtins
+  such as `exit` were reported as missing programs.
+- Validation: `pytest` 155 passed (fake provider; no live calls). Live:
+  Claude Code completed a disposable-fixture run (branch + worktree, main
+  untouched, diff captured, validation passed, checkpoint commit), and its
+  guard hook refused `git commit` and an out-of-worktree write in a live
+  session. Live Codex ran but failed upstream: CLI 0.114.0 is too old for
+  the account's models.
+
 ## 2026-10-03
 
 ### Autobuild — Provider-Agnostic Agent Roles

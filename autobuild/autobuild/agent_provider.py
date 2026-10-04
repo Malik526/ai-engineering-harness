@@ -1,35 +1,54 @@
 """Provider-neutral invocation contract every agent adapter implements.
 
-Phase 0.2 adds one adapter per registry provider (e.g. a module per provider
-that builds that CLI's non-interactive command line). The controller only ever
-talks to this interface, selected through the project's role assignments, so
-swapping providers never touches orchestration code.
+The controller only talks to this interface, selected through the project's
+role assignments (provider_loader.py), so swapping providers never touches
+orchestration code. Provider-specific command lines, flags and output parsing
+live in autobuild/adapters/.
 """
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, Protocol
+from typing import Any, Mapping, Optional, Protocol
+
+
+@dataclass(frozen=True)
+class ProviderHealth:
+    provider: str
+    available: bool
+    version: Optional[str]
+    detail: str  # what was checked, or why the provider is unavailable
 
 
 @dataclass(frozen=True)
 class AgentRequest:
     role: str  # planner | implementer | reviewer
-    prompt_file: Path  # assembled by the controller from the brief/artifacts
+    prompt_file: Path  # assembled by the controller; sent to the agent on stdin
     working_directory: Path  # the run's worktree; the agent must not leave it
-    output_directory: Path  # where the adapter writes raw logs and structured output
+    output_directory: Path  # adapter writes raw stdout/stderr and helper files here
+    report_schema: Mapping[str, Any]  # JSON Schema the agent's final answer must satisfy
+    session_id: Optional[str] = None  # controller-chosen id, used when the provider accepts one
     resume_session_id: Optional[str] = None  # never set for a reviewer (always a fresh session)
-    allowed_operations: tuple[str, ...] = field(default_factory=tuple)  # ids from policy/safety.yaml
-    max_turns: Optional[int] = None
-    timeout_seconds: Optional[int] = None
+    timeout_seconds: int = 3600
+    env: Mapping[str, str] = field(default_factory=dict)  # added to the inherited environment; includes the guard settings
+    model: Optional[str] = None  # None = the provider's default
 
 
 @dataclass(frozen=True)
 class AgentResult:
     provider: str
-    session_id: str
-    exit_code: int
-    output_file: Path  # the agent's final structured output
-    log_file: Path
+    session_id: Optional[str]
+    exit_code: Optional[int]  # None when the process never started or was killed
+    timed_out: bool
+    terminated: bool  # stopped by terminate() (timeout or stop request)
+    duration_seconds: float
+    stdout_file: Path
+    stderr_file: Path
+    structured_output: Optional[dict[str, Any]]  # the agent's final report, parsed
+    output_error: Optional[str]  # why structured_output is missing, if it is
+
+    @property
+    def succeeded(self) -> bool:
+        return self.exit_code == 0 and not self.timed_out and not self.terminated
 
 
 class AgentProvider(Protocol):
@@ -37,8 +56,18 @@ class AgentProvider(Protocol):
 
     provider_id: str
 
-    def run(self, request: AgentRequest) -> AgentResult: ...
+    def health_check(self) -> ProviderHealth:
+        """Cheap local check that the provider can be invoked. Never starts an agent session."""
+        ...
+
+    def start(self, request: AgentRequest) -> None:
+        """Begin the operation without blocking."""
+        ...
+
+    def get_result(self) -> AgentResult:
+        """Block until the operation ends (or times out) and return its result."""
+        ...
 
     def terminate(self) -> None:
-        """Stop the running operation (used by the stop sequence). Must be safe to call at any time."""
+        """Stop the running operation. Safe to call at any time, including before start."""
         ...

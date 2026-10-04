@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autobuild.local/schemas/implementation-report.schema.json",
+  "title": "Implementer final report",
+  "description": "The structured final answer the implementer must return. Every object closes its properties and lists them all as required, so providers with strict structured-output modes accept it. SUPPLEMENTAL: the controller never treats these claims as evidence.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "implementation_summary", "files_changed", "tests_reported",
+    "documentation_changed", "assumptions", "known_issues"
+  ],
+  "properties": {
+    "implementation_summary": { "type": "string" },
+    "files_changed": { "type": "array", "items": { "type": "string" } },
+    "tests_reported": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["command", "outcome", "details"],
+        "properties": {
+          "command": { "type": "string" },
+          "outcome": { "type": "string", "enum": ["passed", "failed", "not_run"] },
+          "details": { "type": "string" }
+        }
+      }
+    },
+    "documentation_changed": { "type": "array", "items": { "type": "string" } },
+    "assumptions": { "type": "array", "items": { "type": "string" } },
+    "known_issues": { "type": "array", "items": { "type": "string" } }
+  }
+}

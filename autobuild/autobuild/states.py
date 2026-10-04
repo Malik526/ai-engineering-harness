@@ -32,9 +32,11 @@ S = RunState
 _FORWARD: dict[RunState, frozenset[RunState]] = {
     S.IDLE: frozenset({S.PLANNING, S.READY}),
     S.PLANNING: frozenset({S.READY, S.IDLE}),
-    S.READY: frozenset({S.IMPLEMENTING, S.HUMAN_BLOCKED}),
+    S.READY: frozenset({S.IMPLEMENTING, S.HUMAN_BLOCKED, S.FAILED}),
     S.IMPLEMENTING: frozenset({S.VALIDATING, S.HUMAN_BLOCKED, S.FAILED}),
-    S.VALIDATING: frozenset({S.REVIEWING, S.REVISING, S.HUMAN_BLOCKED, S.FAILED}),
+    # VALIDATING -> COMPLETED is the implementation-only path (review_mode none);
+    # the run-state schema forbids it from claiming a review it never had.
+    S.VALIDATING: frozenset({S.REVIEWING, S.REVISING, S.COMPLETED, S.HUMAN_BLOCKED, S.FAILED}),
     S.REVIEWING: frozenset({S.PASSED, S.REVISING, S.HUMAN_BLOCKED, S.FAILED}),
     S.REVISING: frozenset({S.VALIDATING, S.HUMAN_BLOCKED, S.FAILED}),
     S.PASSED: frozenset({S.COMPLETED, S.FAILED}),

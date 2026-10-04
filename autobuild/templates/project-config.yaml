@@ -23,6 +23,9 @@ agents:                      # any registry provider may fill any role it suppor
 git:
   protected_branches: [main]
   branch_prefix: agent/
+  checkpoint_commits: false  # true: controller commits on the run branch after validation passes
+  # default_base_branch: main
+  # worktree_root: ../example.worktrees   # default: <project>.worktrees beside the project
 
 paths:                       # repository-relative
   roadmap: docs/roadmap
@@ -33,10 +36,20 @@ paths:                       # repository-relative
 limits:
   max_review_cycles: 3
   max_consecutive_implementations: 5
+  implementer_timeout_seconds: 3600
 
 validation:
   browser_tool: none         # none | playwright | agent-browser
   require_clean_git_before_start: true
+  commands:                  # controller-owned validation; ${PROJECT_ROOT} / ${WORKTREE} substituted
+    - name: tests
+      kind: test             # setup | test | lint | typecheck | build | other
+      run: pytest -q
+      # cwd: web             # repository-relative
+      # env: {PYTHONPATH: "${WORKTREE}/src"}
+      # paths: ["web/*"]     # run only when matching files changed
+      # required: true
+      # timeout_seconds: 1800
 
 notifications:
   enabled: false

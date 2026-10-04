@@ -71,11 +71,13 @@ def test_registry_roles_are_known_roles():
 
 
 def test_core_code_never_names_a_provider():
-    """Orchestration code must work through roles; only the registry names providers."""
+    """Orchestration code works through roles; only the registry and autobuild/adapters/ name providers."""
     names = re.compile("|".join(re.escape(p) for p in load_registry()["providers"]), re.I)
+    adapters = CORE_ROOT / "autobuild" / "adapters"
     offenders = [
         f"{path.relative_to(CORE_ROOT)}:{n}"
-        for path in (CORE_ROOT / "autobuild").glob("*.py")
+        for path in (CORE_ROOT / "autobuild").rglob("*.py")
+        if adapters not in path.parents
         for n, line in enumerate(path.read_text().splitlines(), 1)
         if names.search(line)
     ]
