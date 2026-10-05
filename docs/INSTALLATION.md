@@ -51,8 +51,9 @@ python3 ~/ai-engineering-harness/scripts/setup/audit_instructions.py
 
 This is a read-only check that every policy in `policies/global/` is
 symlinked into `~/.agents/`, imported by `~/.claude/CLAUDE.md` and
-referenced by `~/.codex/AGENTS.md`, and that no policy contains a pasted
-agent-memory record. Run it after adding a policy or editing an adapter.
+referenced by `~/.codex/AGENTS.md`, that no policy contains a pasted
+agent-memory record, and that `docs/POLICY_ENFORCEMENT_MATRIX.md` covers
+every canonical policy. Run it after adding a policy or editing an adapter.
 
 ## Runtime Commit Guards
 

@@ -11,7 +11,8 @@ files through symlinks. Nothing here belongs to a single application.
 - **Custom skills** (`skills/custom/`): workflow skills written for this harness and reusable across projects.
 - **Customized vendor skills** (`skills/customized/`): upstream skills with local changes, with provenance recorded.
 - **Frameworks and scripts:** `autobuild/` and `scripts/setup/`.
-- **Harness documentation** (`docs/`).
+- **Harness documentation** (`docs/`), including the policy enforcement
+  matrix and evaluation records.
 
 ## What Doesn't Belong Here
 
@@ -36,7 +37,8 @@ scripts/setup/        links.manifest + install.py (check / apply / adopt links),
                       audit_instructions.py (verify the policy → adapter chain and commit guards)
 scripts/hooks/        git_commit_guard.py (Claude Code: every git commit asks the human)
 scripts/tests/        tests for the harness scripts
-docs/                 ARCHITECTURE, INSTALLATION, SKILL_MANAGEMENT
+docs/                 ARCHITECTURE, INSTALLATION, SKILL_MANAGEMENT,
+                      POLICY_ENFORCEMENT_MATRIX, evaluations and ADRs
 CHANGELOG.md
 ```
 

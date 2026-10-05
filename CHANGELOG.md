@@ -2,6 +2,25 @@
 
 ## 2026-10-04
 
+### Policies - Enforcement Matrix and Deterministic Audit
+
+- Added `docs/POLICY_ENFORCEMENT_MATRIX.md` as the authoritative classification
+  of meaningful global policy rules: semantic, deterministic, or hybrid,
+  including current mechanisms, gaps, recommended mechanisms, and status.
+- Added a root ADR for the policy-as-intent plus deterministic-enforcement
+  architecture. It keeps always-on manual development separate from Autobuild
+  controls while allowing reliable rules to be backed by hooks, schemas,
+  audits, Git guards, and runtime permission mechanisms.
+- Added `docs/POLICY_ENFORCEMENT_EVALUATION.md` to record the policy-loading,
+  commit-guard, checkpoint, manual-usability, and semantic-rule preservation
+  checks for this audit.
+- `audit_instructions.py` now verifies that the policy enforcement matrix
+  exists, contains the required audit fields, and covers every canonical
+  policy in `policies/global/`.
+- Docs now link the matrix from README, architecture, and installation notes.
+- Validation: added instruction-audit tests for complete matrix coverage and
+  missing-policy failure cases.
+
 ### Policies — Mode-Aware Commit Rules
 
 - Root ambiguity: `GIT.md` let agents commit "if the active runtime is

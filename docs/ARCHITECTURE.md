@@ -23,6 +23,22 @@ Edits always happen in this repository. A runtime path that's a symlink into
 this repo is a view, not a copy. `install.py` (check mode) reports any
 runtime path that has drifted into an independent copy.
 
+## Policy Enforcement Model
+
+Global policy is the intent layer. Deterministic mechanisms reinforce only the
+rules that can be checked reliably without harming normal work: instruction
+wiring audits, runtime commit prompts, Claude Code hooks, Codex execpolicy
+rules, Autobuild Git guards, schemas and configured validation commands.
+
+`docs/POLICY_ENFORCEMENT_MATRIX.md` records each meaningful global rule, its
+classification, current mechanism, gap and status. `scripts/setup/audit_instructions.py`
+is the read-only health check for the instruction chain and verifies that the
+matrix covers every canonical policy in `policies/global/`.
+
+Autobuild controls remain opt-in and controller-owned. Manual development uses
+the always-on global policies and runtime-level safety guards, but it does not
+inherit Autobuild checkpoint commits or autonomous state transitions.
+
 ### Why Symlinks
 
 Symlinks keep exactly one copy of each file, so a runtime can't drift from the

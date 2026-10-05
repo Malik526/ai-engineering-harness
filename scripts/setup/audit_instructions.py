@@ -6,11 +6,12 @@ For each canonical policy in policies/global/, verify that:
   2. the Claude Code adapter (~/.claude/CLAUDE.md) imports it (`@~/.agents/<NAME>.md`);
   3. the Codex adapter (~/.codex/AGENTS.md) references it (`~/.agents/<NAME>.md`).
 Also flags canonical policies that contain auto-memory records (they belong
-in the agent's memory store, not in vendor-neutral policy), and checks the
+in the agent's memory store, not in vendor-neutral policy), verifies that the
+policy enforcement matrix covers every canonical policy, and checks the
 runtime commit guards that back GIT.md's manual-mode rule: Claude Code must
 ask before `git commit` (no silent allow rule, an ask rule, and the
 scripts/hooks/git_commit_guard.py PreToolUse hook that also catches
-`git -C … commit`), and Codex's execpolicy rules must prompt for `git commit`,
+`git -C ... commit`), and Codex's execpolicy rules must prompt for `git commit`,
 `git -C` and `git -c`.
 
 Read-only. Exit 0 when the chain is complete, 1 otherwise. Standard library
@@ -24,6 +25,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 POLICY_DIR = REPO_ROOT / "policies" / "global"
+POLICY_MATRIX = REPO_ROOT / "docs" / "POLICY_ENFORCEMENT_MATRIX.md"
 RUNTIME_DIR = Path.home() / ".agents"
 ADAPTERS = {
     "claude": (Path.home() / ".claude" / "CLAUDE.md", "@~/.agents/{name}.md"),
@@ -38,11 +40,23 @@ _CODEX_PROMPTS = {
 }
 # Markers of an auto-memory file pasted into a policy.
 _MEMORY_MARKERS = re.compile(r"^\s*(originSessionId:|node_type: memory)", re.M)
+_MATRIX_REQUIRED_TEXT = (
+    "policy source",
+    "classification",
+    "current enforcement mechanism",
+    "enforcement gap",
+    "recommended mechanism",
+    "implementation status",
+)
+
+
+def policy_names() -> list[str]:
+    return sorted(p.stem for p in POLICY_DIR.glob("*.md"))
 
 
 def audit() -> list[str]:
     problems = []
-    policies = sorted(p.stem for p in POLICY_DIR.glob("*.md"))
+    policies = policy_names()
     if not policies:
         return [f"no canonical policies in {POLICY_DIR}"]
     adapter_text = {}
@@ -65,6 +79,25 @@ def audit() -> list[str]:
                 problems.append(f"{name}: {runtime} adapter does not reference {reference}")
         if _MEMORY_MARKERS.search(canonical.read_text()):
             problems.append(f"{name}: canonical policy contains an auto-memory record")
+    return problems
+
+
+def audit_policy_matrix() -> list[str]:
+    """The audit artifact must cover every canonical global policy."""
+    policies = policy_names()
+    if not POLICY_MATRIX.is_file():
+        return [f"policy matrix {POLICY_MATRIX} is missing"]
+    text = POLICY_MATRIX.read_text()
+    normalized = text.lower()
+    problems = [
+        f"policy matrix is missing required field text: {required}"
+        for required in _MATRIX_REQUIRED_TEXT
+        if required not in normalized
+    ]
+    for name in policies:
+        source = f"policies/global/{name}.md"
+        if source not in text:
+            problems.append(f"policy matrix does not cover {source}")
     return problems
 
 
@@ -95,12 +128,13 @@ def audit_commit_guards() -> list[str]:
 
 
 def main() -> int:
-    problems = audit() + audit_commit_guards()
+    problems = audit() + audit_policy_matrix() + audit_commit_guards()
     for problem in problems:
         print(f"FAIL {problem}")
     if not problems:
-        names = ", ".join(sorted(p.stem for p in POLICY_DIR.glob("*.md")))
+        names = ", ".join(policy_names())
         print(f"OK   {len(ADAPTERS)} runtime adapters load all global policies: {names}")
+        print(f"OK   policy enforcement matrix covers all global policies: {POLICY_MATRIX}")
         print("OK   runtime commit guards: Claude Code (ask rule + hook) and Codex (prompt rules) stop before git commit")
     return 1 if problems else 0
 
