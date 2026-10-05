@@ -6,12 +6,18 @@ For each canonical policy in policies/global/, verify that:
   2. the Claude Code adapter (~/.claude/CLAUDE.md) imports it (`@~/.agents/<NAME>.md`);
   3. the Codex adapter (~/.codex/AGENTS.md) references it (`~/.agents/<NAME>.md`).
 Also flags canonical policies that contain auto-memory records (they belong
-in the agent's memory store, not in vendor-neutral policy).
+in the agent's memory store, not in vendor-neutral policy), and checks the
+runtime commit guards that back GIT.md's manual-mode rule: Claude Code must
+ask before `git commit` (no silent allow rule, an ask rule, and the
+scripts/hooks/git_commit_guard.py PreToolUse hook that also catches
+`git -C … commit`), and Codex's execpolicy rules must prompt for `git commit`,
+`git -C` and `git -c`.
 
 Read-only. Exit 0 when the chain is complete, 1 otherwise. Standard library
 only, so it runs on a fresh machine before any virtualenv exists.
 """
 
+import json
 import re
 import sys
 from pathlib import Path
@@ -22,6 +28,13 @@ RUNTIME_DIR = Path.home() / ".agents"
 ADAPTERS = {
     "claude": (Path.home() / ".claude" / "CLAUDE.md", "@~/.agents/{name}.md"),
     "codex": (Path.home() / ".codex" / "AGENTS.md", "~/.agents/{name}.md"),
+}
+CLAUDE_SETTINGS = Path.home() / ".claude" / "settings.json"
+CODEX_RULES = Path.home() / ".codex" / "rules" / "default.rules"
+COMMIT_HOOK = "git_commit_guard.py"
+_CODEX_PROMPTS = {
+    word: re.compile(r'prefix_rule\(\s*pattern\s*=\s*\[\s*"git"\s*,\s*"' + re.escape(word) + r'"\s*\]\s*,\s*decision\s*=\s*"prompt"')
+    for word in ("commit", "-C", "-c")
 }
 # Markers of an auto-memory file pasted into a policy.
 _MEMORY_MARKERS = re.compile(r"^\s*(originSessionId:|node_type: memory)", re.M)
@@ -55,13 +68,40 @@ def audit() -> list[str]:
     return problems
 
 
+def audit_commit_guards() -> list[str]:
+    """Manual mode never commits silently: each runtime must stop for the human."""
+    problems = []
+    try:
+        permissions = json.loads(CLAUDE_SETTINGS.read_text()).get("permissions", {})
+    except (OSError, json.JSONDecodeError) as exc:
+        return [f"claude: cannot read {CLAUDE_SETTINGS}: {exc}"]
+    silent = [rule for rule in permissions.get("allow", []) if re.search(r"\bgit\s+commit\b|^Bash\(git\s*\*?\)$|^Bash$", rule)]
+    if silent:
+        problems.append(f"claude: allow rules let git commit run without asking: {', '.join(silent)}")
+    if not any(re.search(r"\bgit\s+commit\b", rule) for rule in permissions.get("ask", [])):
+        problems.append("claude: no ask rule for git commit in ~/.claude/settings.json")
+    hooks = json.loads(CLAUDE_SETTINGS.read_text()).get("hooks", {}).get("PreToolUse", [])
+    if not any(COMMIT_HOOK in h.get("command", "") for entry in hooks if entry.get("matcher") in ("Bash", "*")
+               for h in entry.get("hooks", [])):
+        problems.append(f"claude: PreToolUse Bash hook {COMMIT_HOOK} is not registered")
+    try:
+        rules = CODEX_RULES.read_text()
+        missing = [word for word, pattern in _CODEX_PROMPTS.items() if not pattern.search(rules)]
+        if missing:
+            problems.append(f"codex: {CODEX_RULES} has no prompt rule for git {', git '.join(missing)}")
+    except OSError:
+        problems.append(f"codex: {CODEX_RULES} is missing")
+    return problems
+
+
 def main() -> int:
-    problems = audit()
+    problems = audit() + audit_commit_guards()
     for problem in problems:
         print(f"FAIL {problem}")
     if not problems:
         names = ", ".join(sorted(p.stem for p in POLICY_DIR.glob("*.md")))
         print(f"OK   {len(ADAPTERS)} runtime adapters load all global policies: {names}")
+        print("OK   runtime commit guards: Claude Code (ask rule + hook) and Codex (prompt rules) stop before git commit")
     return 1 if problems else 0
 
 

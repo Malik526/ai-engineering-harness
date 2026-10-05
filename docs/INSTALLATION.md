@@ -54,6 +54,34 @@ symlinked into `~/.agents/`, imported by `~/.claude/CLAUDE.md` and
 referenced by `~/.codex/AGENTS.md`, and that no policy contains a pasted
 agent-memory record. Run it after adding a policy or editing an adapter.
 
+## Runtime Commit Guards
+
+`GIT.md` says manual development never commits without the human. These
+machine-local settings enforce it. They aren't tracked here because the files
+also hold personal runtime state, but `audit_instructions.py` checks them.
+
+`~/.claude/settings.json`: no `allow` rule matching `git commit`, plus:
+
+```json
+"permissions": { "ask": ["Bash(git commit *)"] },
+"hooks": { "PreToolUse": [ { "matcher": "Bash", "hooks": [
+  { "type": "command", "command": "python3 ~/ai-engineering-harness/scripts/hooks/git_commit_guard.py", "timeout": 10 }
+] } ] }
+```
+
+`~/.codex/rules/default.rules`:
+
+```text
+prefix_rule(pattern=["git", "commit"], decision="prompt")
+prefix_rule(pattern=["git", "-C"], decision="prompt")
+prefix_rule(pattern=["git", "-c"], decision="prompt")
+```
+
+Check the Codex rules with
+`codex execpolicy check --rules ~/.codex/rules/default.rules git -C /repo commit`
+(expect `prompt`). Run the hook tests with
+`autobuild/.venv/bin/python -m pytest scripts/tests`.
+
 ## Adding a Link
 
 Add a `<source> <target>` line to `scripts/setup/links.manifest`, then run

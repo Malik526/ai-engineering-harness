@@ -52,7 +52,11 @@ def format_report(state: dict[str, Any], result: Optional[dict[str, Any]], evide
         lines += [f"  {c['name']}: {c['status']}" for c in validation.document["commands"]]
     else:
         lines.append("Validation (controller): not run")
-    lines.append(f"Commit: {state['last_commit'][:12]}" if state.get("last_commit") else "Commit: none")
+    if state.get("last_commit"):
+        lines.append(f"Commit: {state['last_commit'][:12]} (controller checkpoint; not pushed or merged)")
+    else:
+        reason = (state.get("checkpoint") or {}).get("reason")
+        lines.append("Commit: none" + (f" ({reason})" if reason else ""))
     issues = (result or {}).get("reported") or {}
     known = issues.get("known_issues", []) if isinstance(issues, dict) else []
     lines.append("Known issues (reported by implementer): " + ("; ".join(known) if known else "none"))

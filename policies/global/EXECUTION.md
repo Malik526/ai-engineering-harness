@@ -64,5 +64,10 @@ refresh policies
 → report
 ```
 
+`report` ends the loop in manual development: a completion summary with a
+recommended commit message, not a commit (see `GIT.md` → Commit Workflow).
+Only the Autobuild controller commits automatically, and only on its isolated
+run branch.
+
 The brief already defines the implementation goal. Your job is to execute it within the
 repository's established architecture, not to re-design the project before starting.

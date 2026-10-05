@@ -68,6 +68,7 @@ def test_provider_configuration_switching_uses_same_flow(tmp_path, monkeypatch, 
 def test_checkpoint_commits_disabled_leaves_work_uncommitted(tmp_path, monkeypatch, fake_registry):
     root, outcome, main_before = _run(tmp_path, monkeypatch, checkpoint=False)
     assert outcome.state["state"] == "COMPLETED" and outcome.state["last_commit"] is None
+    assert outcome.state["checkpoint"]["reason"] == "git.checkpoint_commits is disabled in the project config"
     assert git(root, "rev-parse", outcome.state["branch"]).strip() == main_before
     assert "?? feature.txt" in git(Path(outcome.state["worktree"]), "status", "--porcelain")
 
@@ -150,10 +151,20 @@ def test_secret_like_files_block_the_run(tmp_path, monkeypatch, fake_registry):
     assert outcome.state["last_commit"] is None
 
 
-def test_browser_required_stops_at_human_gate(tmp_path, monkeypatch, fake_registry):
-    _, outcome, _ = _run(tmp_path, monkeypatch, browser=True)
+def test_browser_required_checkpoints_then_stops_at_human_gate(tmp_path, monkeypatch, fake_registry):
+    root, outcome, main_before = _run(tmp_path, monkeypatch, browser=True)
     assert _states(outcome) == ["READY", "IMPLEMENTING", "VALIDATING", "HUMAN_BLOCKED"]
-    assert outcome.state["last_commit"] is None and "browser" in outcome.state["human_gate"]["reason"]
+    assert "browser" in outcome.state["human_gate"]["reason"]
+    # Validated GREEN work is preserved as a checkpoint on the run branch; main is untouched.
+    assert outcome.state["checkpoint"]["committed"] is True
+    assert git(root, "rev-parse", outcome.state["branch"]).strip() == outcome.state["last_commit"]
+    assert git(root, "rev-parse", "main").strip() == main_before
+
+
+def test_checkpoint_decision_is_recorded(tmp_path, monkeypatch, fake_registry):
+    _, outcome, _ = _run(tmp_path, monkeypatch)
+    assert outcome.state["checkpoint"] == {"committed": True, "reason": "GREEN work validated on the isolated run branch"}
+    assert "not pushed or merged" in (outcome.run_dir / "report.md").read_text()
 
 
 def test_interrupt_stops_and_preserves(tmp_path, monkeypatch, fake_registry):

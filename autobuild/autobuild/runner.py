@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from autobuild.agent_provider import AgentRequest, AgentResult
+from autobuild.checkpoint_policy import decide_checkpoint
 from autobuild.git_client import GitClient
 from autobuild.git_evidence import GitEvidence, capture, post_validation_status
 from autobuild.git_shim import write_shim
@@ -27,6 +28,7 @@ from autobuild.prompt_builder import build_prompt
 from autobuild.roles import IMPLEMENTER
 from autobuild.run_report import format_report
 from autobuild.run_store import RunStore, close_logger, utc_now
+from autobuild.safety import is_protected_branch
 from autobuild.schemas import load_schema, schema_errors
 from autobuild.states import RunState
 from autobuild.validation_runner import ValidationOutcome, run_validation, substitute
@@ -182,22 +184,37 @@ class Runner:
 
     def _finish(self) -> None:
         plan, store = self.plan, self.store
+        commit = self._checkpoint()
         if plan.browser_gate:
-            store.transition(RunState.HUMAN_BLOCKED, human_gate={
+            kept = f"checkpoint {commit[:12]} on {plan.branch}" if commit else f"uncommitted changes in {plan.worktree}"
+            store.transition(RunState.HUMAN_BLOCKED, last_commit=commit, human_gate={
                 "reason": "browser validation required by the brief; automated browser validation arrives in phase 0.4",
                 "human_action": [f"Verify the brief's browser acceptance criteria manually in {plan.worktree}",
-                                 "Commit or discard the uncommitted changes on the run branch yourself"],
+                                 f"Then keep or discard the validated work ({kept})"],
                 "at": utc_now()})
             return
-        commit = None
-        if plan.checkpoint_commits:
-            message = (f"autobuild({plan.meta['id']}): {plan.meta['title']}\n\n"
-                       f"Autobuild-Run: {plan.run_id}\nAutobuild-Implementer: {plan.assignment.provider}\n")
-            commit = self.git.commit_tree_to_branch(plan.worktree, plan.branch, self.evidence.snapshot_tree,
-                                                    self.evidence.head_commit, message)
-            store.log.info("checkpoint commit %s on %s", commit[:12], plan.branch)
-            self._verify_protected_refs()
         store.transition(RunState.COMPLETED, last_commit=commit)
+
+    def _checkpoint(self) -> Optional[str]:
+        """Commit the validated snapshot when checkpoint_policy allows it; never asks anyone."""
+        plan, store = self.plan, self.store
+        decision = decide_checkpoint(
+            enabled_in_config=plan.checkpoint_commits, autonomy_execution=plan.gate.execution,
+            validation_passed=self.validation is not None and self.validation.passed,
+            has_changes=self.evidence is not None and self.evidence.has_changes,
+            branch_protected=is_protected_branch(plan.branch, plan.config.protected_branches),
+        )
+        store.update(checkpoint=decision.as_record())
+        store.log.info("checkpoint decision: %s (%s)", "commit" if decision.commit else "skip", decision.reason)
+        if not decision.commit:
+            return None
+        message = (f"autobuild({plan.meta['id']}): {plan.meta['title']}\n\n"
+                   f"Autobuild-Run: {plan.run_id}\nAutobuild-Implementer: {plan.assignment.provider}\n")
+        commit = self.git.commit_tree_to_branch(plan.worktree, plan.branch, self.evidence.snapshot_tree,
+                                                self.evidence.head_commit, message)
+        store.log.info("checkpoint commit %s on %s", commit[:12], plan.branch)
+        self._verify_protected_refs()
+        return commit
 
     def _stop(self) -> None:
         store = self.store

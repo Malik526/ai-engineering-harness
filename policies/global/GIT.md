@@ -11,9 +11,11 @@ This file is the vendor-neutral source of truth for Git behavior that applies ac
 
 ## Commit Workflow
 
-Completed engineering work should end at a clear, logical commit boundary — never ambiguously. It should either be committed, or clearly reported as verified and ready to commit with a proposed commit message.
+Who commits depends on the execution mode, never on what a runtime's permission
+settings happen to allow. A permission rule that lets a command run without a
+prompt is not an instruction to commit.
 
-Before considering a task complete:
+### Before any commit boundary
 
 1. Inspect `git status`.
 2. Preserve unrelated existing changes.
@@ -22,27 +24,21 @@ Before considering a task complete:
 5. Run the appropriate verification for the touched code.
 6. Review the final diff and confirm the change set represents one logical unit of work.
 
-### If the active runtime is permitted to commit
+### Manual development (default)
 
-When the active agent/runtime is allowed to create commits without further user authorization:
+Any work outside an Autobuild run — interactive sessions, one-off agent
+invocations, scripts the human started — is manual development:
 
-- create a commit for the completed logical unit of work;
-- use a concise commit message describing the actual change;
-- do not include unrelated dirty-worktree changes.
+- Do not run `git commit` unless the human explicitly asks for a commit in the
+  current conversation for this change.
+- Finish the work: implementation, validation, documentation reconciliation.
+- End the final message with a completion summary and a line starting
+  `Recommended commit:` followed by the commit message. This applies to every
+  completed change in a Git repository, however small. The human commits.
+- An explicit request covers only the change it names; it is not standing
+  permission for later work.
 
-### If explicit authorization is required
-
-When the active agent/runtime requires explicit user authorization before `git commit`, do not bypass or work around that restriction.
-
-Instead, once the work is verified and commit-ready:
-
-1. Report that the task is ready to commit.
-2. Summarize what changed.
-3. List any important verification performed.
-4. Propose a concise commit message.
-5. Wait for user authorization before running `git commit`.
-
-Example:
+Example ending:
 
 ```text
 Task complete and ready to commit.
@@ -50,20 +46,40 @@ Task complete and ready to commit.
 Changes:
 - Replaced Tools navigation with Free Stuff.
 - Fixed mobile navigation toggle.
-- Removed duplicate Contact label.
-- Added consistent mobile container spacing.
 
 Verification:
 - Production build passes.
 - Mobile and desktop routes verified.
-- Existing lead-capture flow unaffected.
 
-Proposed commit:
+Recommended commit:
 
 `fix: refine portfolio navigation and mobile layout`
-
-Awaiting authorization to commit.
 ```
+
+### Autobuild runs
+
+Inside an Autobuild run, commits belong to the deterministic controller, not
+to any agent:
+
+- Agents (implementer, reviewer, planner) never commit; their git access is read-only.
+- The controller creates a checkpoint commit on the run's isolated branch when
+  its configuration and policy allow it (GREEN work, controller validation
+  passed, `git.checkpoint_commits` enabled, no safety violation). No human
+  approval is requested for that commit; it is not a merge or a release.
+- After a checkpoint, the run continues or stops as its workflow defines.
+
+### YELLOW, RED, and human-gated work
+
+- Stop as the autonomy policy requires, preserve the work, and report the
+  required human action.
+- Do not perform the gated operation, merge, or push.
+- In an Autobuild run, the controller may still checkpoint completed, validated
+  GREEN work on the isolated branch before stopping.
+
+### Never without explicit human instruction
+
+In every mode: no merge into protected branches, no push, no force push, no
+history rewriting of shared branches.
 
 ## Commit Granularity
 

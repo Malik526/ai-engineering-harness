@@ -33,7 +33,9 @@ policies/global/      global policies, linked to ~/.agents/<NAME>.md
 skills/custom/        custom skills (implementation-planning)
 autobuild/            autobuild framework, linked to ~/.agents/autobuild
 scripts/setup/        links.manifest + install.py (check / apply / adopt links),
-                      audit_instructions.py (verify the policy → adapter chain)
+                      audit_instructions.py (verify the policy → adapter chain and commit guards)
+scripts/hooks/        git_commit_guard.py (Claude Code: every git commit asks the human)
+scripts/tests/        tests for the harness scripts
 docs/                 ARCHITECTURE, INSTALLATION, SKILL_MANAGEMENT
 CHANGELOG.md
 ```

@@ -2,6 +2,43 @@
 
 ## 2026-10-04
 
+### Policies — Mode-Aware Commit Rules
+
+- Root ambiguity: `GIT.md` let agents commit "if the active runtime is
+  permitted to commit", and permission came from accumulated runtime
+  settings. Claude Code held an allow rule for `git commit -m '…'`, so some
+  sessions committed and others asked.
+- `GIT.md` Commit Workflow is now mode-aware:
+  - Manual development never commits unless the human explicitly asks, and ends
+    with a `Recommended commit:` line.
+  - In Autobuild, only the controller makes checkpoint commits, without asking.
+  - Human-gated work stops and preserves; no merge or push without instruction.
+- `EXECUTION.md` ties the loop's `report` step to it.
+- Deterministic guards:
+  - New `scripts/hooks/git_commit_guard.py`, a Claude Code PreToolUse hook that
+    answers "ask" for any git invocation whose subcommand is `commit`,
+    including `git -C … commit`, which slipped past the plain permission
+    pattern in testing.
+  - Runtime settings (outside the repo): the Claude allow rule is removed and
+    an ask rule plus the hook are added; Codex `default.rules` prompts for
+    `git commit`, `git -C` and `git -c`.
+  - `audit_instructions.py` now verifies all of these.
+- Autobuild: new `checkpoint_policy.py` decides checkpoint commits (config,
+  GREEN, validation, changes, unprotected branch). The decision is recorded
+  in run state (`checkpoint`) and the report. Supersedes 0.2's no-commit at
+  `HUMAN_BLOCKED`: validated GREEN work is now checkpointed before a human
+  gate. ADR 0002.
+- Validation:
+  - `pytest` 174 (autobuild) and 16 (hook) passing; the audit passes, and on
+    the old configuration it fails on all three guards.
+  - Live, in disposable fixtures:
+    - Claude manual edit: no commit, recommended message given.
+    - Codex manual edit (3 runs): no commit, but the recommended-commit line
+      only in 1 of 2 runs after the wording fix.
+    - Claude explicit "commit it": held by the hook, recommended message given.
+    - Autobuild GREEN: checkpoint committed without asking, `main` untouched.
+    - YELLOW brief: refused at preflight.
+
 ### Autobuild — Consolidated Live-Test Fixtures and Safe Cleanup
 
 - Disposable live-verification fixtures now live under one git-ignored

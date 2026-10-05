@@ -100,15 +100,28 @@ go to `validation/`. If validation changes the worktree, that's recorded in
 
 **Browser validation** isn't implemented yet (0.4). A brief with
 `browser_required: true` runs and validates, then stops at `HUMAN_BLOCKED`
-with manual steps. It's never marked validated, and nothing is committed.
+with manual steps. It's never marked validated. Its controller-validated work
+is still checkpointed on the run branch when the checkpoint rules allow it.
 
 ## Commits
 
-With `git.checkpoint_commits: true` and passing validation, the controller
-commits the pre-validation snapshot tree onto the run branch as
-`autobuild(<id>): <title>`, with `Autobuild-Run` and `Autobuild-Implementer`
-trailers. It never pushes or merges. Agents can't commit at all. With the
-setting off (the default), changes stay uncommitted in the worktree.
+Agents never commit; only the controller does, and it never asks the human
+first. A checkpoint is a commit on the isolated run branch, not a merge, push
+or release. `autobuild/checkpoint_policy.py` decides, and the decision and
+reason are recorded in `state.json` → `checkpoint` and in the report. The
+controller commits only when all of these hold:
+
+1. `git.checkpoint_commits: true` in the project config (default false);
+2. the work is GREEN (autonomy execution `autonomous`);
+3. required controller validation passed;
+4. the snapshot has changes;
+5. the run branch is not protected.
+
+The commit contains the pre-validation snapshot tree, with message
+`autobuild(<id>): <title>` and `Autobuild-Run` / `Autobuild-Implementer`
+trailers. A run that then stops at a human gate (`HUMAN_BLOCKED`) keeps that
+checkpoint. Outside Autobuild, manual development never commits automatically
+(global `GIT.md`).
 
 ## Outcomes
 
@@ -116,7 +129,7 @@ setting off (the default), changes stay uncommitted in the worktree.
 | --- | --- |
 | `COMPLETED` | Validation passed; committed if enabled. Unreviewed: the human reviews and merges |
 | `FAILED` | Provider crash or timeout, no changes, agent commit, branch moved, protected ref moved, secret-like files, validation failure, controller error. `failure.reason` names which |
-| `HUMAN_BLOCKED` | Browser validation required |
+| `HUMAN_BLOCKED` | Browser validation required. Validated work is checkpointed first if the rules allow it |
 | `STOPPED` | Ctrl-C: the provider process group is terminated and the state recorded. Remote stop arrives in 0.6 |
 
 Every run ends with a summary (also saved as `report.md`): implementation,

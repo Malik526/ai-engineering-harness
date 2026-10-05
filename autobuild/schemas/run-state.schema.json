@@ -32,6 +32,16 @@
       "type": ["string", "null"],
       "pattern": "^[0-9a-f]{40}$"
     },
+    "checkpoint": {
+      "description": "The controller's checkpoint-commit decision (autobuild/checkpoint_policy.py) and why.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["committed", "reason"],
+      "properties": {
+        "committed": { "type": "boolean" },
+        "reason": { "type": "string", "minLength": 1 }
+      }
+    },
     "review_mode": {
       "description": "none = implementation-only run (phase 0.2), ends unreviewed and waits for the human; independent = the run must pass a fresh reviewer before completing.",
       "enum": ["none", "independent"]
