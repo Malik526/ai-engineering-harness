@@ -54,6 +54,23 @@ Implementation status:
 
 ## Vendor Capability Reuse
 
+### Autobuild 0.4 Browser Controls (2026-10-04)
+
+Explicit config and schemas select browser gates. Controller subprocess exit,
+timeout/readiness and artifact-contract checks determine PASS/FAIL/ERROR/SKIPPED.
+Required non-PASS gates block checkpoint independently of semantic reviewer PASS.
+Every revision/resume receives new snapshot-bound browser evidence; hashes and
+identity are checked before review, resumed agents and checkpoint. Missing
+brief-required coverage blocks before commit, superseding the 0.3 exception.
+
+Mandatory Bubblewrap user/network/PID namespaces, read-only worktree, private
+home/temp/runtime sockets, explicit environment and process-group cleanup confine
+browser execution. Missing sandbox capability fails closed. Artifacts are only
+copied from fresh approved output roots with link/path/filename/budget checks.
+Existing normal validation remains unsandboxed; secret content scanning and
+resource quotas remain gaps. These controls do not constitute hostile-workload
+isolation. See `autobuild/docs/BROWSER_GATES.md`, ADR 0004 and `EVALUATION_0_4.md`.
+
 ### Autobuild 0.3 Controls (2026-10-04)
 
 Independent review remains semantic judgment backed by deterministic review

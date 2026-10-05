@@ -53,7 +53,8 @@ def git(cwd: Path, *args: str) -> str:
 
 def make_project(tmp_path: Path, *, provider: str = "fake-a", commands: Optional[list[dict[str, Any]]] = None,
                  checkpoint: bool = True, browser: bool = False, extra_git: Optional[dict[str, Any]] = None,
-                 reviewer: Optional[str] = None, max_cycles: int = 3) -> tuple[Path, Path]:
+                 reviewer: Optional[str] = None, max_cycles: int = 3,
+                 browser_gates: Optional[list[dict]] = None) -> tuple[Path, Path]:
     """Create <tmp>/proj on main with a GREEN brief; return (project root, brief path)."""
     root = tmp_path / "proj"
     (root / "docs" / "decisions").mkdir(parents=True)
@@ -80,6 +81,8 @@ def make_project(tmp_path: Path, *, provider: str = "fake-a", commands: Optional
         "notifications": {"enabled": False, "provider": "console"},
         "control": {"remote_stop_enabled": False, "provider": "none"},
     }
+    if browser_gates is not None:
+        config["validation"]["browser_gates"] = browser_gates
     (root / ".autobuild" / "config.yaml").write_text(yaml.safe_dump(config, sort_keys=False))
     git(root, "init", "-q", "-b", "main")
     git(root, "config", "user.name", "Test")

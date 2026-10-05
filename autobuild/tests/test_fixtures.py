@@ -52,6 +52,15 @@ def test_create_rejects_bad_or_taken_names(root):
         fixtures.create_fixture(implementer="claude", name="f1")
 
 
+def test_browser_fixture_is_clean_and_explicit(root):
+    path = fixtures.create_fixture(implementer="codex", name="browser", browser=True)
+    config = load_project_config(path)
+    assert config.data["validation"]["browser_gates"][0]["command"] == ["node", "smoke.cjs"]
+    assert (path / "package-lock.json").is_file()
+    assert "browser_required: true" in (path / "docs/roadmap/V-1.md").read_text()
+    assert _git(path, "status", "--porcelain") == ""
+
+
 def test_clean_removes_verified_fixture_and_worktrees(root):
     path = fixtures.create_fixture(implementer="codex", name="f1")
     worktree = _with_worktree(path)

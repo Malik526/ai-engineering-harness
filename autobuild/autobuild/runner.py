@@ -31,6 +31,8 @@ from autobuild.states import RunState
 from autobuild.validation_runner import ValidationOutcome, run_validation, substitute
 
 from autobuild.secret_files import secret_like
+from autobuild.browser_contract import digest, history_errors
+from autobuild.browser_runner import run_browser
 
 
 class RunAborted(Exception):
@@ -56,6 +58,7 @@ class Runner:
         self.attempt = 0
         self.active_adapter = plan.adapter
         self.expected_head = plan.base_commit
+        self.browser = None
 
     # --- Entry point ---
 
@@ -88,14 +91,18 @@ class Runner:
                 self.store = RunStore.create(config=plan.config, run_dir=plan.run_dir, run_id=plan.run_id,
                                             implementation_id=plan.meta["id"], brief_path=plan.brief_path,
                                             review_mode="independent")
-                self.store.update(review_history=[], revision_history=[], final_review_status=None)
+                self.store.update(review_history=[], revision_history=[], browser_history=[], final_review_status=None)
                 self._create_worktree()
             self._implement(resume=bool(plan.resume_state))
             self._collect_evidence()
             self._validate()
+            self._browser()
             while True:
                 review = self._review()
                 if review["status"] == "PASS":
+                    if self.browser is not None and not self.browser["passed"]:
+                        self._human_block("required browser gates did not PASS; reviewer cannot override controller evidence")
+                        raise RunAborted
                     self.store.transition(RunState.PASSED)
                     break
                 if review["status"] == "BLOCK":
@@ -108,6 +115,7 @@ class Runner:
                 self._implement(resume=True, review=review)
                 self._collect_evidence()
                 self._validate()
+                self._browser()
             self._finish()
         except RunAborted:
             pass
@@ -149,6 +157,7 @@ class Runner:
     def _implement(self, *, resume: bool = False, review: Optional[dict] = None) -> None:
         plan, store = self.plan, self.store
         self._verify_frozen_brief()
+        self._verify_browser_history()
         self._verify_protected_refs()
         if self.git.current_branch(plan.worktree) != plan.branch or self.git.read(
                 "rev-parse", "HEAD", cwd=plan.worktree).strip() != self.expected_head:
@@ -260,6 +269,7 @@ class Runner:
 
     def _review(self) -> dict:
         plan, store = self.plan, self.store
+        self._verify_browser_history()
         cycle = store.state["review_cycle"] + 1
         if cycle > plan.config.data["limits"]["max_review_cycles"]:
             self._human_block("maximum review cycles reached without PASS")
@@ -297,6 +307,7 @@ class Runner:
         session.update(session_id=actual_id, ended_at=utc_now())
         store.update(agent_sessions=sessions)
         self._verify_snapshot("reviewer")
+        self._verify_browser_history()
         if not result.succeeded or result.structured_output is None:
             self._abort("reviewer_failed", f"configured reviewer {assignment.provider}: exit={result.exit_code}; {result.output_error}")
         review = dict(result.structured_output)
@@ -307,6 +318,8 @@ class Runner:
             errors.append("review identity does not match the current run/cycle")
         if not {"brief", "git_diff", "changed_files", "validation_output"} <= set(review.get("evidence_reviewed", [])):
             errors.append("required authoritative evidence is missing")
+        if self.browser is not None and "browser_evidence" not in review.get("evidence_reviewed", []):
+            errors.append("controller browser evidence was not reviewed")
         findings = review.get("findings", [])
         if len({f["id"] for f in findings}) != len(findings):
             errors.append("finding IDs are not unique")
@@ -325,6 +338,8 @@ class Runner:
                    "provider": assignment.provider, "session_id": actual_id, "artifact": f"{prefix}.json",
                    "snapshot_tree": self.evidence.snapshot_tree,
                    "validation_artifact": f"validation/cycle-{self.attempt:02d}/results.json", "at": utc_now()}]
+        if self.browser is not None:
+            history[-1]["browser_artifact"] = f"browser/cycle-{self.attempt:02d}/results.json"
         store.update(review_history=history, final_review_status=review["status"])
         self.active_adapter = plan.adapter
         return review
@@ -339,28 +354,32 @@ class Runner:
             self._abort(f"{role}_modified_worktree", f"{role} changed the implementation snapshot", recoverable=False)
 
     def _human_block(self, reason: str) -> None:
+        actions = ["Resolve the blocking condition, then explicitly run autobuild resume " + str(self.plan.run_dir)]
+        if self.browser and any(g["id"] == "missing-browser-coverage" for g in self.browser["gates"]):
+            actions = ["Configure enabled required browser gates and start a new run; "
+                       "execution configuration is frozen for this preserved run"]
         self.store.transition(RunState.HUMAN_BLOCKED,
-                              checkpoint={"committed": False, "reason": "independent review did not PASS"},
+                              checkpoint={"committed": False, "reason": reason},
                               human_gate={"reason": reason,
-                              "human_action": ["Resolve the blocking condition, then explicitly run autobuild resume " + str(self.plan.run_dir)],
+                              "human_action": actions,
                               "at": utc_now()})
 
     def _finish(self) -> None:
         plan, store = self.plan, self.store
         commit = self._checkpoint()
-        if plan.browser_gate:
-            kept = f"checkpoint {commit[:12]} on {plan.branch}" if commit else f"uncommitted changes in {plan.worktree}"
-            store.transition(RunState.HUMAN_BLOCKED, last_commit=commit, human_gate={
-                "reason": "browser validation required by the brief; automated browser validation arrives in phase 0.4",
-                "human_action": [f"Verify the brief's browser acceptance criteria manually in {plan.worktree}",
-                                 f"Then keep or discard the validated work ({kept})"],
-                "at": utc_now()})
-            return
         store.transition(RunState.COMPLETED, last_commit=commit)
 
     def _checkpoint(self) -> Optional[str]:
         """Commit the validated snapshot when checkpoint_policy allows it; never asks anyone."""
         plan, store = self.plan, self.store
+        self._verify_browser_history()
+        if self.browser is None and (plan.browser_gate or plan.config.data["validation"].get("browser_gates")):
+            self._human_block("controller browser evidence is missing")
+            raise RunAborted
+        if (self.browser is not None and (not self.browser["passed"] or
+                self.browser["snapshot_tree"] != self.evidence.snapshot_tree or self.browser["attempt"] != self.attempt)):
+            self._human_block("required browser evidence failed or is stale")
+            raise RunAborted
         self._verify_snapshot("checkpoint")
         decision = decide_checkpoint(
             enabled_in_config=plan.checkpoint_commits, autonomy_execution=plan.gate.execution,
@@ -409,6 +428,26 @@ class Runner:
         store.transition(RunState.STOPPED)
 
     # --- Helpers ---
+
+    def _browser(self) -> None:
+        plan, store = self.plan, self.store
+        self.browser = run_browser(run_id=plan.run_id, attempt=self.attempt,
+                                  review_cycle=store.state["review_cycle"] + 1, worktree=plan.worktree,
+                                  head_commit=self.evidence.head_commit, snapshot_tree=self.evidence.snapshot_tree,
+                                  brief_sha256=store.state["brief_sha256"], config=plan.config.data,
+                                  run_dir=plan.run_dir, browser_required=plan.browser_gate)
+        if self.browser is not None:
+            artifact = f"browser/cycle-{self.attempt:02d}/results.json"
+            record = {"attempt": self.attempt, "review_cycle": self.browser["review_cycle"], "artifact": artifact,
+                      "sha256": digest(store.path(artifact)), "snapshot_tree": self.evidence.snapshot_tree,
+                      "passed": self.browser["passed"]}
+            store.update(browser_history=store.state.get("browser_history", []) + [record])
+            self._verify_snapshot("browser")
+
+    def _verify_browser_history(self) -> None:
+        errors = history_errors(self.plan.run_dir, self.store.state)
+        if errors:
+            self._abort("browser_evidence_modified", "; ".join(errors), recoverable=False)
 
     def _verify_frozen_brief(self) -> None:
         if hashlib.sha256(self.store.path("brief.md").read_bytes()).hexdigest() != self.store.state["brief_sha256"]:

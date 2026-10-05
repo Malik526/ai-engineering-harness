@@ -62,7 +62,8 @@ def _git(cwd: Path, *args: str) -> subprocess.CompletedProcess:
 
 # --- Create ---
 
-def create_fixture(*, implementer: str, name: Optional[str] = None, root: Optional[Path] = None) -> Path:
+def create_fixture(*, implementer: str, name: Optional[str] = None, root: Optional[Path] = None,
+                   browser: bool = False) -> Path:
     """Create a fixture repository on `main` with the standard V-1 brief; return its path."""
     root = (root or runtime_root()).resolve()
     if name is None:
@@ -87,6 +88,21 @@ def create_fixture(*, implementer: str, name: Optional[str] = None, root: Option
     shutil.copyfile(_FIXTURE_TEMPLATES / "V-1.md", path / "docs/roadmap/V-1.md")
     config = Template((_FIXTURE_TEMPLATES / "config.yaml").read_text()).substitute(implementer=implementer)
     (path / ".autobuild/config.yaml").write_text(config)
+    if browser:
+        import yaml
+        source = TEMPLATE_DIR / "browser-fixture"
+        for filename in ("AGENTS.md", "package.json", "package-lock.json", "smoke.cjs", ".gitignore"):
+            shutil.copyfile(source / filename, path / filename)
+        shutil.copyfile(source / "V-1.md", path / "docs/roadmap/V-1.md")
+        document = load_yaml(config)
+        document["validation"].update(browser_tool="playwright", commands=[
+            {"name": "dependencies", "kind": "setup", "run": "npm ci --ignore-scripts --offline --no-audit --no-fund"},
+            {"name": "html-exists", "kind": "test", "run": "test -f index.html"}], browser_gates=[
+            {"id": "counter", "kind": "e2e", "command": ["node", "smoke.cjs"], "timeout_seconds": 60,
+             "required": True, "artifacts": ["counter.png", "trace.zip", "report.json"],
+             "service": {"command": ["python3", "-m", "http.server", "38404", "--bind", "127.0.0.1"],
+                         "ready_url": "http://127.0.0.1:38404", "timeout_seconds": 10}}])
+        (path / ".autobuild/config.yaml").write_text(yaml.safe_dump(document, sort_keys=False))
 
     for args in (("init", "-q", "-b", "main"), ("add", "-A"), (*_IDENTITY, "commit", "-q", "-m", "fixture")):
         done = _git(path, *args)

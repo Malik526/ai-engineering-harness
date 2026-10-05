@@ -171,9 +171,10 @@ def preflight(brief_path: Path, project_root: Path, *, base_branch: Optional[str
     if meta["validation"]["tests_required"] and not any(c["kind"] == "test" for c in commands):
         issues.append("validation: the brief requires tests but the project config defines no `test` command")
     browser_gate = bool(meta["validation"]["browser_required"])
-    if browser_gate:
-        warnings.append("brief requires browser validation, which arrives in phase 0.4: "
-                        "the run will stop at HUMAN_BLOCKED after controller validation")
+    if browser_gate and not any(g.get("required", True) and g.get("enabled", True)
+                                for g in config.data["validation"].get("browser_gates", [])):
+        warnings.append("brief requires browser validation but no enabled required browser gate is configured; "
+                        "checkpointing is blocked until coverage is configured in a new run")
 
     if issues:
         raise PreflightError(issues)

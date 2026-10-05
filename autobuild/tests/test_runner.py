@@ -151,13 +151,14 @@ def test_secret_like_files_block_the_run(tmp_path, monkeypatch, fake_registry):
     assert outcome.state["last_commit"] is None
 
 
-def test_browser_required_checkpoints_then_stops_at_human_gate(tmp_path, monkeypatch, fake_registry):
+def test_browser_required_without_gates_stops_before_checkpoint(tmp_path, monkeypatch, fake_registry):
+    monkeypatch.setenv("FAKE_BROWSER_REVIEW", "1")
     root, outcome, main_before = _run(tmp_path, monkeypatch, browser=True)
-    assert _states(outcome) == ["READY", "IMPLEMENTING", "VALIDATING", "REVIEWING", "PASSED", "HUMAN_BLOCKED"]
+    assert _states(outcome) == ["READY", "IMPLEMENTING", "VALIDATING", "REVIEWING", "HUMAN_BLOCKED"]
     assert "browser" in outcome.state["human_gate"]["reason"]
-    # Validated GREEN work is preserved as a checkpoint on the run branch; main is untouched.
-    assert outcome.state["checkpoint"]["committed"] is True
-    assert git(root, "rev-parse", outcome.state["branch"]).strip() == outcome.state["last_commit"]
+    # Required missing browser evidence now blocks checkpoints, including reviewer PASS.
+    assert outcome.state["checkpoint"]["committed"] is False
+    assert outcome.state["last_commit"] is None
     assert git(root, "rev-parse", "main").strip() == main_before
 
 

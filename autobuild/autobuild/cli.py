@@ -198,7 +198,7 @@ def _fixture(args: argparse.Namespace) -> int:
     root = fixtures.runtime_root()
     if args.action == "create":
         try:
-            path = fixtures.create_fixture(implementer=args.implementer, name=args.name)
+            path = fixtures.create_fixture(implementer=args.implementer, name=args.name, browser=args.browser)
         except fixtures.FixtureError as exc:
             print(f"FAIL {exc}")
             return 1
@@ -250,6 +250,31 @@ def _show_gate(path: Path, done: str) -> bool:
     return True
 
 
+def _show_evidence(run: Path, attempt: Optional[int]) -> bool:
+    from autobuild.browser_contract import evidence_errors
+    try:
+        state = json.loads((run / "state.json").read_text())
+        records = state.get("browser_history", [])
+        if attempt is not None:
+            records = [record for record in records if record["attempt"] == attempt]
+        if not records:
+            return _report(str(run), ["no controller browser evidence for the selected attempt"])
+        ok = True
+        for record in records:
+            errors = evidence_errors(run, record["artifact"], record["sha256"])
+            ok &= _report(str(run / record["artifact"]), errors)
+            if not errors:
+                document = json.loads((run / record["artifact"]).read_text())
+                print(f"Attempt {document['attempt']}; review cycle {document['review_cycle']}; "
+                      f"snapshot {document['snapshot_tree']}")
+                for gate in document["gates"]:
+                    print(f"  {gate['id']}: {gate['status']} ({'required' if gate['required'] else 'optional'}); "
+                          f"exit={gate['exit_code']}; artifacts={len(gate['artifacts'])}; {gate['detail']}")
+        return ok
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        return _report(str(run), [str(exc)])
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="autobuild", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -278,11 +303,15 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("run", type=Path)
     p.add_argument("--project", type=Path)
     p.add_argument("--dry-run", action="store_true")
+    p = sub.add_parser("evidence", help="inspect and verify controller browser manifests")
+    p.add_argument("run", type=Path, help="run directory")
+    p.add_argument("--attempt", type=int)
     p = sub.add_parser("fixture")
     fixture_sub = p.add_subparsers(dest="action", required=True)
     f = fixture_sub.add_parser("create")
     f.add_argument("--implementer", required=True, help="registry provider id to assign to every role")
     f.add_argument("--name")
+    f.add_argument("--browser", action="store_true", help="counter fixture with controller-owned Playwright gates")
     fixture_sub.add_parser("list")
     f = fixture_sub.add_parser("clean")
     f.add_argument("names", nargs="*", help="fixture names under the runtime root")
@@ -299,6 +328,8 @@ def main(argv: list[str] | None = None) -> int:
         return _run(args.brief, args.project, args.base, args.yes, args.dry_run)
     if args.command == "resume":
         return _resume(args.run, args.project, args.dry_run)
+    if args.command == "evidence":
+        return 0 if _show_evidence(args.run, args.attempt) else 1
     if args.command == "check":
         ok = _check_core()
     elif args.command == "config":

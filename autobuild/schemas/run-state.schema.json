@@ -45,6 +45,20 @@
     "protected_refs": {
       "type": "object", "additionalProperties": { "type": ["string", "null"] }
     },
+    "browser_history": {
+      "type": "array", "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["attempt", "review_cycle", "artifact", "sha256", "snapshot_tree", "passed"],
+        "properties": {
+          "attempt": { "type": "integer", "minimum": 1 },
+          "review_cycle": { "type": "integer", "minimum": 1 },
+          "artifact": { "type": "string", "minLength": 1 },
+          "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "snapshot_tree": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+          "passed": { "type": "boolean" }
+        }
+      }
+    },
     "review_history": {
       "type": "array", "items": {
         "type": "object", "additionalProperties": false,
@@ -57,6 +71,7 @@
           "artifact": { "type": "string", "minLength": 1 },
           "snapshot_tree": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
           "validation_artifact": { "type": "string", "minLength": 1 },
+          "browser_artifact": { "type": ["string", "null"] },
           "at": { "$ref": "#/$defs/timestamp" }
         }
       }

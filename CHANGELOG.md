@@ -2,6 +2,27 @@
 
 ## 2026-10-04
 
+### Autobuild 0.4 - Controller-Owned Browser Gates
+
+- Added explicit argv-based `validation.browser_gates`, optional controller-owned
+  loopback services, deterministic PASS/FAIL/ERROR/SKIPPED outcomes, and immutable
+  per-attempt browser evidence with identity, snapshot/config/brief hashes,
+  bounded summaries, raw logs and hashed artifact manifests.
+- Browser commands run fail-closed in Linux Bubblewrap user/PID/network namespaces:
+  read-only worktree, isolated environment/home/temp, no external network, and
+  controller-owned cleanup. Missing namespaces/tools produce ERROR, never fallback.
+- Fresh reviewers consume browser evidence before implementer narrative; revisions
+  rerun normal and browser validation. Required non-PASS gates block checkpointing
+  even on reviewer PASS. Missing brief-required coverage now blocks before commit,
+  superseding the 0.3 checkpoint-then-manual-browser exception.
+- Added evidence inspection CLI, opt-in Playwright counter fixture, safety/lifecycle/
+  revision/resume tests, architecture/runner/artifact/enforcement documentation,
+  ADR 0004 and `autobuild/docs/EVALUATION_0_4.md`. No rollover, merge or push.
+- Validation: 368 combined tests, core schema check, installed policy audit and
+  diff checks pass. Real Playwright FAIL -> REVISE -> resumed fix -> fresh
+  browser/reviewer PASS -> fixture checkpoint completed with Codex/Codex and
+  Claude/Codex; fixture main branches unchanged, no current quota block/fallback.
+
 ### Autobuild 0.3 - Independent Review, Revisions And Explicit Resume
 
 - Added provider-neutral fresh review after controller validation: structured

@@ -16,7 +16,7 @@ from autobuild.paths import SCHEMA_DIR
 
 SCHEMA_NAMES = (
     "config", "implementation", "run-state", "review", "validation", "notification",
-    "implementation-report", "implementation-result",
+    "implementation-report", "implementation-result", "browser",
 )
 
 

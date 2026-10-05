@@ -8,6 +8,7 @@ from autobuild.paths import PROJECT_CONFIG_RELPATH
 from autobuild.provider_registry import RoleAssignment, assignment_errors, resolve_assignments
 from autobuild.schemas import schema_errors
 from autobuild.yaml_loader import load_yaml
+from autobuild.browser_contract import browser_config_errors
 
 
 class ConfigError(ValueError):
@@ -63,6 +64,7 @@ def config_errors(data: Any) -> list[str]:
         if protected.startswith(prefix):
             errors.append(f"git: protected branch {protected!r} falls under branch_prefix {prefix!r}")
     errors.extend(assignment_errors(data))
+    errors.extend(browser_config_errors(data["validation"].get("browser_gates", [])))
     return errors
 
 

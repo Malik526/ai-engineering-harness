@@ -1,11 +1,11 @@
-# Independent Review Runner (Phase 0.3)
+# Independent Review And Browser Runner (Phase 0.4)
 
 `autobuild run` takes one approved brief through implementation and review and stops
 for the human:
 
 ```text
 brief → preflight → branch + worktree → configured implementer → git evidence
-      → controller validation → fresh reviewer → PASS → eligible checkpoint → STOP
+      → normal validation → browser gates → fresh reviewer → PASS + gates PASS → checkpoint → STOP
                                 REVISE → resume implementer → revalidate → fresh reviewer
                                 BLOCK / cycle limit → HUMAN_BLOCKED
 ```
@@ -22,6 +22,7 @@ cd <project>
 ~/.agents/autobuild/bin/autobuild run docs/roadmap/M4.2.md --yes --base agent/M4.1-auth
 ~/.agents/autobuild/bin/autobuild resume <run-id-or-directory> --dry-run
 ~/.agents/autobuild/bin/autobuild resume <run-id-or-directory>
+~/.agents/autobuild/bin/autobuild evidence <run-directory> --attempt 2
 ```
 
 Before starting it prints the implementation, autonomy, implementer (with
@@ -104,10 +105,12 @@ changes the implementation snapshot, the run fails as non-recoverable; build
 outputs must be ignored. Branch/HEAD/protected refs are checked too. A failed required command ends the run
 `FAILED`. No repair is attempted.
 
-**Browser validation** isn't implemented yet (0.4). A brief with
-`browser_required: true` runs and validates, then stops at `HUMAN_BLOCKED`
-with manual steps. It's never marked validated. Its controller-validated work
-is still checkpointed on the run branch when the checkpoint rules allow it.
+**Browser validation** runs next through `validation.browser_gates`. See
+`BROWSER_GATES.md` for argv configuration, server lifecycle and confinement.
+Required FAIL/ERROR/SKIPPED gates cannot checkpoint, even if reviewer returns PASS.
+A brief with `browser_required: true` needs an enabled required browser gate;
+missing coverage produces a required SKIPPED record and blocks before checkpoint.
+This deliberately supersedes the 0.3 checkpoint-before-manual-browser exception.
 
 ## Commits
 
@@ -123,11 +126,13 @@ controller commits only when all of these hold:
 3. required controller validation passed;
 4. the snapshot has changes;
 5. the run branch is not protected.
+6. required browser gates PASS on this exact attempt/snapshot, and preserved
+   browser evidence/artifacts still match the controller's hash records.
 
 The commit contains the pre-validation snapshot tree, with message
 `autobuild(<id>): <title>` and `Autobuild-Run` / `Autobuild-Implementer`
-trailers. A run that then stops at a human gate (`HUMAN_BLOCKED`) keeps that
-checkpoint. Outside Autobuild, manual development never commits automatically
+trailers. Browser/review human gates occur before the checkpoint. Outside
+Autobuild, manual development never commits automatically
 (global `GIT.md`).
 
 ## Outcomes
@@ -183,8 +188,9 @@ human increase (schema maximum 10); prior cycles are never reset. A surviving
 `.controller.lock` must be investigated before a human removes it. Missing
 provider sessions fail clearly without fallback to a new session/provider.
 
-Browser evidence remains a manual gate in 0.3. Resume does not certify a browser
-requirement or silently mark it fulfilled: such runs stop at that gate again.
+Resume checks all preserved browser manifests, hashes and identity records, then
+runs fresh gates after the resumed implementation. It never reuses prior PASS.
+Missing gate configuration requires a new run because execution config is frozen.
 Protected refs changed by unrelated human work also block resume; start a new
 run rather than silently rebasing preserved work.
 
@@ -209,6 +215,15 @@ a controller validation command, checkpoint commits on, and the chosen
 provider in every role. Creation writes an ownership marker into
 `.git/autobuild-fixture.json`, which is never tracked and never dirties the
 tree.
+
+`fixture create --implementer codex --browser` creates the opt-in counter fixture
+instead. It pins Playwright with a lockfile and intentionally leaves the first
+click handler unwired to exercise real FAIL -> REVISE -> correction -> PASS.
+Seed the npm cache (`npm ci --ignore-scripts --no-audit --no-fund` in the fixture)
+and install its Chromium (`npx playwright install chromium`) before starting.
+Normal controller setup uses offline `npm ci`; browser execution has no external
+network. A fixture-local gate `env.FIXTURE_CHROMIUM` may explicitly select an
+existing compatible executable inside the approved Playwright browser cache.
 
 `clean` is a dry run unless `--yes` is given. It deletes a fixture only when
 all of these hold:

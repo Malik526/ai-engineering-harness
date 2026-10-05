@@ -18,6 +18,7 @@ from autobuild.run_state_checks import run_state_errors
 from autobuild.schemas import schema_errors
 from autobuild.secret_files import secret_like
 from autobuild.validation_runner import command_unavailable
+from autobuild.browser_contract import history_errors
 
 
 def resume_preflight(run: Path, project_root: Path) -> RunPlan:
@@ -60,6 +61,11 @@ def resume_preflight(run: Path, project_root: Path) -> RunPlan:
             raise ValueError("frozen approved brief hash mismatch")
         meta, body = split_front_matter(frozen.read_text())
         issues = brief_errors(meta, body)
+        issues.extend(history_errors(directory, state))
+        for record in state.get("browser_history", []):
+            expected = f"browser/cycle-{record['attempt']:02d}/results.json"
+            if record["artifact"] != expected or record["attempt"] > len(attempts):
+                issues.append("browser history has an inconsistent attempt/path")
         gate = evaluate_gate(meta, completed_from_siblings(config.path("roadmap") / f"{meta['id']}.md"))
         if not gate.may_continue:
             issues.extend(gate.reasons)
@@ -119,6 +125,8 @@ def resume_preflight(run: Path, project_root: Path) -> RunPlan:
             validation_artifact = directory / record["validation_artifact"]
             if not is_within(validation_artifact, directory) or not validation_artifact.is_file():
                 issues.append("persisted validation artifact is missing or outside the run")
+            if record.get("browser_artifact") not in (None, *[r["artifact"] for r in state.get("browser_history", [])]):
+                issues.append("review references missing browser history")
         if issues:
             raise PreflightError(issues)
         return RunPlan(config=config, project_root=root, brief_path=frozen, meta=meta, body=body,

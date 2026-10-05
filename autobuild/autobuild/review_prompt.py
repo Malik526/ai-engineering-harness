@@ -34,6 +34,14 @@ def review_prompt(plan, store, cycle: int, attempt: int, session_id: str) -> str
         f"reviewed_at must be a full ISO-8601 timestamp, for example {store.state['updated_at']}. Finding IDs use R{cycle}-1, R{cycle}-2, etc.",
         "## Supplemental Implementer Narrative (Read Last)\n" + store.path(f"{prefix}/summary.md").read_text(),
     ]
+    browser = store.path(f"browser/cycle-{attempt:02d}/results.json")
+    if browser.is_file():
+        document = json.loads(browser.read_text())
+        summary = {key: value for key, value in document.items() if key != "files"}
+        blocks.insert(10, "## Controller Browser Evidence\n" + json.dumps(summary, indent=2)
+                      + "\nImmutable manifest and raw artifacts: " + str(browser)
+                      + "\nInclude browser_evidence in evidence_reviewed. Required gates must PASS; "
+                        "use REVISE for fixable FAIL and BLOCK for unavailable tools or missing coverage.")
     return "\n\n".join(blocks) + "\n"
 
 
@@ -51,6 +59,9 @@ def revision_prompt(plan, store, review: dict | None) -> str:
         }, indent=2))
     else:
         blocks.append("Continue the interrupted or failed implementation using the approved brief and preserved worktree.")
+    if store.state.get("browser_history"):
+        blocks.append("Controller browser evidence (read the failures and preserved logs): "
+                      + str(store.path(store.state["browser_history"][-1]["artifact"])))
     blocks.append("Return the implementation-report schema, with implementation_summary, files_changed, tests_reported, "
                   "documentation_changed, assumptions and known_issues.")
     return "\n\n".join(blocks) + "\n"

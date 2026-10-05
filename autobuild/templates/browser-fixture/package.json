@@ -1,0 +1,6 @@
+{
+  "name": "autobuild-browser-fixture",
+  "private": true,
+  "version": "1.0.0",
+  "dependencies": { "playwright": "1.63.0" }
+}

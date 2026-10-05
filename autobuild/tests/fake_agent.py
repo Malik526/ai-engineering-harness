@@ -46,6 +46,8 @@ def main() -> int:
                   "status": status, "reviewer": {"provider": "fake-a", "session_id": os.environ["AUTOBUILD_SESSION_ID"]},
                   "reviewed_at": datetime.now(timezone.utc).isoformat(),
                   "evidence_reviewed": ["brief", "git_diff", "changed_files", "validation_output"], "findings": []}
+        if os.environ.get("FAKE_BROWSER_REVIEW"):
+            report["evidence_reviewed"].append("browser_evidence")
         if status == "REVISE":
             report["findings"] = [{"id": f"R{cycle}-1", "severity": "major", "requirement": "Correct feature",
                                    "evidence": "feature.txt needs correction", "affected_files": ["feature.txt:1"],

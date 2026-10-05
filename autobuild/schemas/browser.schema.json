@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Controller-owned browser evidence",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "producer", "run_id", "attempt", "review_cycle", "worktree", "head_commit", "snapshot_tree", "brief_sha256", "config_sha256", "started_at", "finished_at", "passed", "gates", "files"],
+  "properties": {
+    "schema_version": { "const": 1 }, "producer": { "const": "controller" },
+    "run_id": { "type": "string", "minLength": 1 },
+    "attempt": { "type": "integer", "minimum": 1 },
+    "review_cycle": { "type": "integer", "minimum": 1 },
+    "worktree": { "type": "string", "minLength": 1 },
+    "head_commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "snapshot_tree": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "brief_sha256": { "$ref": "#/$defs/hash" }, "config_sha256": { "$ref": "#/$defs/hash" },
+    "started_at": { "$ref": "#/$defs/time" }, "finished_at": { "$ref": "#/$defs/time" },
+    "passed": { "type": "boolean" },
+    "gates": { "type": "array", "maxItems": 21, "items": { "$ref": "#/$defs/gate" } },
+    "files": { "type": "array", "items": { "$ref": "#/$defs/file" } }
+  },
+  "$defs": {
+    "hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "time": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$" },
+    "file": {
+      "type": "object", "additionalProperties": false, "required": ["path", "size_bytes", "sha256"],
+      "properties": { "path": { "type": "string", "pattern": "^(?!/)(?!.*(^|/)\\.\\.(/|$)).+$" },
+        "size_bytes": { "type": "integer", "minimum": 0 }, "sha256": { "$ref": "#/$defs/hash" } }
+    },
+    "gate": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "kind", "required", "command", "cwd", "timeout_seconds", "expected_exit_code", "environment", "status", "exit_code", "started_at", "finished_at", "duration_seconds", "detail", "stdout_path", "stderr_path", "stdout_summary", "stderr_summary", "artifacts"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$" },
+        "kind": { "enum": ["browser", "e2e"] }, "required": { "type": "boolean" },
+        "command": { "type": "array", "items": { "type": "string" } }, "cwd": { "type": "string" },
+        "service": { "type": ["object", "null"], "additionalProperties": false,
+          "required": ["command", "cwd", "ready_url", "timeout_seconds"],
+          "properties": { "command": { "type": "array", "items": { "type": "string" } },
+            "cwd": { "type": "string" }, "ready_url": { "type": "string" },
+            "timeout_seconds": { "type": "integer", "minimum": 1 } } },
+        "timeout_seconds": { "type": "integer", "minimum": 1 }, "expected_exit_code": { "const": 0 },
+        "environment": { "type": "object", "additionalProperties": false, "required": ["policy", "keys", "sha256"],
+          "properties": { "policy": { "const": "isolated-explicit" }, "keys": { "type": "array", "items": { "type": "string" } }, "sha256": { "$ref": "#/$defs/hash" } } },
+        "status": { "enum": ["PASS", "FAIL", "ERROR", "SKIPPED"] },
+        "exit_code": { "type": ["integer", "null"] },
+        "started_at": { "$ref": "#/$defs/time" }, "finished_at": { "$ref": "#/$defs/time" },
+        "duration_seconds": { "type": "number", "minimum": 0 }, "detail": { "type": "string" },
+        "stdout_path": { "type": "string" }, "stderr_path": { "type": "string" },
+        "stdout_summary": { "type": "string", "maxLength": 2048 }, "stderr_summary": { "type": "string", "maxLength": 2048 },
+        "artifacts": { "type": "array", "items": { "$ref": "#/$defs/file" } }
+      }
+    }
+  }
+}

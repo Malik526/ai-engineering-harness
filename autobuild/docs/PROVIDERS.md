@@ -72,6 +72,13 @@ process group, files for stdin/stdout/stderr, timeout and termination.
 Provider adapters live in `autobuild/adapters/` and contain everything
 provider-specific: flags, confinement, output parsing.
 
+Browser gates (0.4) do not invoke a provider or change adapter behavior. The
+controller runs declared project argv in its own sandbox and gives immutable
+evidence to any configured reviewer. Reviewers must acknowledge browser_evidence
+when present; PASS cannot override required non-PASS gates. Implementer resume
+and fresh reviewer identity checks remain unchanged. Provider quota failures
+remain explicit failures without cross-provider fallback; see `EVALUATION_0_4.md`.
+
 | Adapter | Invocation | Structured output | Session id | Confinement |
 | --- | --- | --- | --- | --- |
 | `adapters/claude.py` | `claude -p --output-format json` | `--json-schema` | fresh `--session-id`; implementer `--resume <id>` | Implementer: acceptEdits + hook. Reviewer: default mode, Read/Glob/Grep only, Bash/edit/write/web denied. Permission prompts disabled |

@@ -4,7 +4,8 @@ Autobuild is a small, deterministic control plane that coordinates existing
 coding agents through one engineering method: **plan with the human →
 implement → validate → independent review → revise or pass → stop for the
 human**. Roadmap rollover is future work. It doesn't replace agent capabilities. Planning, coding, code
-review and browser automation stay with the agents and their skills.
+review stay with the agents. Browser automation uses existing project tooling,
+but the controller owns its execution and deterministic truth.
 Autobuild owns only what must not depend on a model's judgment: run state,
 autonomy policy, the artifact contract, safety boundaries, stopping and
 notifications.
@@ -42,7 +43,7 @@ Human ⇄ Planner ──(explicit approval)──▶ approved brief (status: rea
                             Implementer ◀──────────────┐
                                  │                     │ findings
                                  ▼                     │
-                    Validation (controller re-runs)    │
+                    Validation + browser gates         │
                                  │                     │
                                  ▼                     │
                      Fresh Reviewer ── REVISE ─────────┘
@@ -107,9 +108,20 @@ Autobuild points at them through `paths` and doesn't copy them.
 | 0.1 | Foundation: schemas, policy, state model, contracts, validators, planning skill |
 | 0.2 | **Done.** Single-implementation runner (`autobuild run`): preflight, worktree/branch isolation, Claude Code and Codex adapters, command guard, controller validation, checkpoint commit. See `RUNNER.md` |
 | 0.3 | **Implemented.** Independent review, bounded revisions, read-only reviewers, per-cycle evidence and explicit CLI resume. See `RUNNER.md` and `EVALUATION_0_3.md` for verification and live-provider limitations |
-| 0.4 | Browser/E2E evidence through existing browser skills |
-| 0.5 | Roadmap rollover through the autonomy gate |
+| 0.4 | **Implemented.** Controller-owned browser/E2E gates, isolated services, immutable evidence and hard checkpoint barriers. See `BROWSER_GATES.md`, ADR 0004 and `EVALUATION_0_4.md` |
+| 0.5 | Recommended next: extend fail-closed process confinement to normal validation before roadmap rollover |
 | 0.6 | Operations: notification providers, remote stop/control provider, spend limits (local CLI resume/history already in 0.3) |
 
 Related: `RUNNER.md`, `PROVIDERS.md`, `AUTONOMY_POLICY.md`, `ARTIFACT_CONTRACT.md`, `SAFETY_MODEL.md`,
 `CONTROL_CONTRACT.md`, `NOTIFICATION_CONTRACT.md`, `decisions/`.
+
+## Browser Ownership
+
+Agents may consume browser evidence, but the Autobuild controller owns execution
+and truth of deterministic browser gates. Config selects gates, not model inference.
+`browser_runner.py` creates a fresh sandbox/output root per gate and attempt;
+`browser_worker.py` owns service readiness, test exit and process cleanup.
+`browser_artifacts.py` confines collection, and `browser_contract.py` checks
+immutable evidence and identity before review, resumed implementation and checkpoint.
+Gate failures reach the existing PASS/REVISE/BLOCK reviewer, never a second review
+system. Required non-PASS evidence prevents checkpointing independently of review.

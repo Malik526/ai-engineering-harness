@@ -55,6 +55,9 @@ def format_report(state: dict[str, Any], result: Optional[dict[str, Any]], evide
         lines.append("Validation (controller): not run")
     if state.get("review_mode") == "independent":
         lines.append(f"Independent review: {state.get('final_review_status') or 'not decided'}; cycles: {state['review_cycle']}")
+    for browser in state.get("browser_history", []):
+        lines.append(f"Browser attempt {browser['attempt']} (controller): "
+                     f"{'PASSED' if browser['passed'] else 'NOT PASSED'}; evidence: {plan.run_dir / browser['artifact']}")
     if state.get("last_commit"):
         lines.append(f"Commit: {state['last_commit'][:12]} (controller checkpoint; not pushed or merged)")
     else:
