@@ -2,8 +2,8 @@
 
 Autobuild is a small, deterministic control plane that coordinates existing
 coding agents through one engineering method: **plan with the human →
-implement → validate → independent review → revise or pass → next item or
-human gate**. It doesn't replace any agent capability. Planning, coding, code
+implement → validate → independent review → revise or pass → stop for the
+human**. Roadmap rollover is future work. It doesn't replace agent capabilities. Planning, coding, code
 review and browser automation stay with the agents and their skills.
 Autobuild owns only what must not depend on a model's judgment: run state,
 autonomy policy, the artifact contract, safety boundaries, stopping and
@@ -17,7 +17,7 @@ notifications.
 | Planner | configured provider | Interactive planning conversation, challenging assumptions, roadmap, approved briefs, autonomy classification | Starts implementation before explicit approval |
 | Controller | Autobuild (deterministic code) | State machine, autonomy gate, worktree/branch isolation, stop handling, notifications | Asks a model whether to continue |
 | Implementer | configured provider | Implements one approved brief inside its worktree, runs validation, updates docs, writes a summary | Approves its own work |
-| Reviewer | configured provider, always a fresh session | Judges the brief against the actual diff and evidence; returns PASS / REVISE / BLOCKED | Treats the implementer's summary as evidence |
+| Reviewer | configured provider, always a fresh session | Judges the brief against the actual diff and evidence; returns PASS / REVISE / BLOCK | Edits code or treats implementer narrative as evidence |
 
 Providers (currently Claude Code and Codex) are assigned to roles in each
 project's `.autobuild/config.yaml` `agents` block, and any provider may fill
@@ -47,11 +47,11 @@ Human ⇄ Planner ──(explicit approval)──▶ approved brief (status: rea
                                  ▼                     │
                      Fresh Reviewer ── REVISE ─────────┘
                         │        │
-                      PASS     BLOCKED ──▶ HUMAN_BLOCKED ──▶ notify human
+                      PASS     BLOCK / budget limit ──▶ HUMAN_BLOCKED
                         │
                checkpoint commit on run branch
                         │
-            next roadmap item ──▶ autonomy gate (GREEN continues, else stop + notify)
+              COMPLETED: stop for human (no rollover)
 ```
 
 Merging into a protected branch always stays outside autobuild.
@@ -70,18 +70,18 @@ Defined in `autobuild/states.py`, mirrored in `schemas/run-state.schema.json`.
 | `REVIEWING` | A fresh reviewer session is judging the evidence |
 | `REVISING` | Implementer is addressing review findings or failed validation |
 | `PASSED` | Reviewer returned PASS; checkpoint commit pending or made |
-| `HUMAN_BLOCKED` | A human gate was reached (YELLOW/RED item, BLOCKED review, review-cycle limit) |
-| `FAILED` | Unrecoverable error; `failure` records why |
-| `STOP_REQUESTED` | A remote stop was seen; the stop sequence is running |
+| `HUMAN_BLOCKED` | Review BLOCK, exhausted budget or browser gate; work preserved |
+| `FAILED` | Error; `failure` records reason and whether explicit resume is safe |
+| `STOP_REQUESTED` | Interrupt seen; the stop sequence is running (remote stop is future work) |
 | `STOPPED` | Stop sequence finished; worktree and uncommitted work preserved |
-| `COMPLETED` | Run finished with a commit on its branch |
+| `COMPLETED` | Controller validation and independent review passed; checkpoint if eligible |
 
 Transitions:
 
 - Forward: `IDLE → PLANNING → READY → IMPLEMENTING → VALIDATING → REVIEWING → PASSED → COMPLETED`.
 - Implementation-only runs (phase 0.2, `review_mode: none`): `READY → IMPLEMENTING → VALIDATING → COMPLETED`. The schema forbids such a run from entering review states or claiming a review; it completes *unreviewed* and waits for the human.
 - Setup failures before implementation: `READY → FAILED`.
-- Revision loop: `VALIDATING → REVISING` (validation failed) and `REVIEWING → REVISING → VALIDATING` (findings). A fix is always re-validated before it is re-reviewed.
+- Implemented revision loop: `REVIEWING → REVISING → VALIDATING → REVIEWING` for findings. Required validation failure ends FAILED; it does not automatically repair. Every correction is revalidated before a fresh review.
 - Exceeding `limits.max_review_cycles` moves the run to `HUMAN_BLOCKED`, never into another loop.
 - `STOP_REQUESTED` can be entered from any working or waiting state, and leads only to `STOPPED`.
 - Human-only resume: `HUMAN_BLOCKED`, `FAILED` and `STOPPED` → `READY`. The controller never resumes on its own.
@@ -106,10 +106,10 @@ Autobuild points at them through `paths` and doesn't copy them.
 | --- | --- |
 | 0.1 | Foundation: schemas, policy, state model, contracts, validators, planning skill |
 | 0.2 | **Done.** Single-implementation runner (`autobuild run`): preflight, worktree/branch isolation, Claude Code and Codex adapters, command guard, controller validation, checkpoint commit. See `RUNNER.md` |
-| 0.3 | Independent review loop with a hard cycle limit |
+| 0.3 | **Implemented.** Independent review, bounded revisions, read-only reviewers, per-cycle evidence and explicit CLI resume. See `RUNNER.md` and `EVALUATION_0_3.md` for verification and live-provider limitations |
 | 0.4 | Browser/E2E evidence through existing browser skills |
 | 0.5 | Roadmap rollover through the autonomy gate |
-| 0.6 | Operations: notification providers, remote stop provider, `/resume`, run history, spend limits |
+| 0.6 | Operations: notification providers, remote stop/control provider, spend limits (local CLI resume/history already in 0.3) |
 
 Related: `RUNNER.md`, `PROVIDERS.md`, `AUTONOMY_POLICY.md`, `ARTIFACT_CONTRACT.md`, `SAFETY_MODEL.md`,
 `CONTROL_CONTRACT.md`, `NOTIFICATION_CONTRACT.md`, `decisions/`.

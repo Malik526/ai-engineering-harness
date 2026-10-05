@@ -66,7 +66,7 @@ _GIT_VALUE_OPTIONS = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--
 _GIT_FORBIDDEN_OPTIONS = {"--git-dir", "--work-tree", "--namespace", "--exec-path"}
 
 
-def check_git(args: list[str], worktree: Path, cwd: Optional[Path] = None) -> Optional[str]:
+def check_git(args: list[str], worktree: Path, cwd: Optional[Path] = None, *, read_only: bool = False) -> Optional[str]:
     """Return a refusal reason for `git <args>`, or None when the call is allowed."""
     cwd = cwd or Path.cwd()
     index = 0
@@ -85,6 +85,8 @@ def check_git(args: list[str], worktree: Path, cwd: Optional[Path] = None) -> Op
     if index >= len(args):
         return None  # bare `git` / `git --version`
     subcommand, rest = args[index], args[index + 1:]
+    if read_only and subcommand in ("add", "rm", "mv", "restore", "checkout"):
+        return "reviewers may not modify files or the Git index"
     allowed = GIT_ALLOWED.get(subcommand)
     if allowed is None:
         return (f"`git {subcommand}` is not allowed for agents in autobuild runs: the controller owns commits, "

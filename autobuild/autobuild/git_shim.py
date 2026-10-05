@@ -32,7 +32,7 @@ def main(argv: list[str]) -> int:
     if not real_git or not worktree:
         print("autobuild git guard: AUTOBUILD_REAL_GIT / AUTOBUILD_WORKTREE not set; refusing", file=sys.stderr)
         return 126
-    reason = check_git(argv, Path(worktree), Path.cwd())
+    reason = check_git(argv, Path(worktree), Path.cwd(), read_only=os.environ.get("AUTOBUILD_ROLE") == "reviewer")
     if reason:
         print(f"autobuild git guard: {reason}", file=sys.stderr)
         return 126

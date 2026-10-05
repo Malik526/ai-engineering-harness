@@ -33,6 +33,17 @@ def run_state_errors(state: dict[str, Any], config: ProjectConfig | None = None)
     reused = sorted(s["session_id"] for s in sessions if s["role"] == "reviewer" and s["session_id"] in implementer_ids)
     if reused:
         errors.append("agent_sessions: reviewer reuses implementer session " + ", ".join(reused))
+    reviewer_ids = [s["session_id"] for s in sessions if s["role"] == "reviewer"]
+    if len(set(reviewer_ids)) != len(reviewer_ids):
+        errors.append("agent_sessions: reviewer session reused across review cycles")
+    if state.get("final_review_status") == "PASS" and not any(
+            r.get("status") == "PASS" for r in state.get("review_history", [])):
+        errors.append("final_review_status: PASS requires a persisted passing review")
+    if "final_review_status" in state and state["state"] in ("PASSED", "COMPLETED") and state["review_mode"] == "independent":
+        history = state.get("review_history", [])
+        if (state["final_review_status"] != "PASS" or not history or history[-1]["status"] != "PASS"
+                or history[-1]["cycle"] != state["review_cycle"]):
+            errors.append("final_review_status: independent completion requires the latest cycle to PASS")
 
     if config is not None:
         branch = state["branch"]

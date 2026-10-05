@@ -5,6 +5,7 @@ Every state write goes through the state machine and the run-state schema
 """
 
 import hashlib
+import copy
 import json
 import logging
 import os
@@ -54,6 +55,7 @@ class RunStore:
         }
         store = cls(run_dir, config, state)
         store._write_state()
+        store.write_json("config.json", config.data)
         store.log.info("run %s created for %s (brief sha256 %s)", run_id, implementation_id, state["brief_sha256"][:12])
         return store
 
@@ -64,16 +66,21 @@ class RunStore:
         return RunState(self.state["state"])
 
     def update(self, **fields: Any) -> None:
-        self.state.update(fields)
-        self.state["updated_at"] = utc_now()
+        candidate = copy.deepcopy(self.state)
+        candidate.update(copy.deepcopy(fields))
+        candidate["updated_at"] = utc_now()
+        errors = run_state_errors(candidate, self.config)
+        if errors:
+            raise StateContractError("; ".join(errors))
+        self.state = candidate
         self._write_state()
 
     def transition(self, target: RunState, *, by_human: bool = False, **fields: Any) -> None:
         assert_transition(self.current, target, by_human=by_human)
         now = utc_now()
-        self.state["history"].append({"state": target.value, "at": now})
+        history = self.state["history"] + [{"state": target.value, "at": now}]
         self.log.info("state %s -> %s", self.state["state"], target.value)
-        self.update(state=target.value, **fields)
+        self.update(state=target.value, history=history, **fields)
 
     def fail(self, reason: str, detail: str, *, recoverable: bool = True) -> None:
         self.log.error("FAILED (%s): %s", reason, detail)
@@ -104,7 +111,7 @@ class RunStore:
 
 
 def _controller_logger(run_dir: Path) -> logging.Logger:
-    logger = logging.getLogger(f"autobuild.run.{run_dir.name}.{id(run_dir)}")
+    logger = logging.getLogger(f"autobuild.run.{run_dir.resolve()}")
     logger.setLevel(logging.INFO)
     logger.propagate = False
     if not logger.handlers:

@@ -7,7 +7,7 @@ providers** that fill them, which are configuration.
 | --- | --- |
 | `planner` | Discusses with the human, maintains the roadmap, writes approved briefs |
 | `implementer` | Implements one approved brief in its worktree |
-| `reviewer` | Independently judges the evidence; returns PASS / REVISE / BLOCKED |
+| `reviewer` | Independently judges evidence read-only; returns PASS / REVISE / BLOCK |
 
 A provider is any local coding agent that autobuild can run non-interactively.
 `providers/registry.yaml` lists them, and it's the **only** place concrete
@@ -52,6 +52,7 @@ Reviewer independence comes from the **session**, not from the vendor:
 
 - The reviewer always starts a fresh session (`AgentRequest.resume_session_id` is never set for it).
 - A reviewer session id may never be a session the implementer used. `run_state_checks.py` rejects that.
+- A reviewer session ID may not repeat across cycles. Actual returned IDs are checked before persistence.
 - The reviewer gets the evidence first (`ARTIFACT_CONTRACT.md`) and the implementer's summary last.
 
 A different vendor adds model diversity, which is useful but optional.
@@ -73,8 +74,18 @@ provider-specific: flags, confinement, output parsing.
 
 | Adapter | Invocation | Structured output | Session id | Confinement |
 | --- | --- | --- | --- | --- |
-| `adapters/claude.py` | `claude -p --output-format json` | `--json-schema` | controller-assigned `--session-id` | `acceptEdits`, `--permission-prompts none`, PreToolUse guard hook, web tools off |
-| `adapters/codex.py` | `codex exec --json --cd <worktree> -` | `--output-schema` + `--output-last-message` | `thread_id` from the JSONL events | `--sandbox workspace-write` |
+| `adapters/claude.py` | `claude -p --output-format json` | `--json-schema` | fresh `--session-id`; implementer `--resume <id>` | Implementer: acceptEdits + hook. Reviewer: default mode, Read/Glob/Grep only, Bash/edit/write/web denied. Permission prompts disabled |
+| `adapters/codex.py` | `codex --ask-for-approval never exec --json --cd <worktree> -` | `--output-schema` + `--output-last-message` | returned thread_id; implementer `exec ... resume <id>` | Implementer: workspace-write. Reviewer: read-only. No approval escalation |
+
+Resume flags are adapter-owned: [Codex non-interactive sessions](https://learn.chatgpt.com/docs/non-interactive-mode)
+and [Claude CLI reference](https://code.claude.com/docs/en/cli-reference).
+Codex's wire schema projects the contract into the API's supported structural
+subset, requires nullable optional fields and removes unsupported conditional checks.
+Its parser omits optional nulls, then validates against the unchanged full local
+contract. This preserves PASS/finding/BLOCK/evidence constraints despite the API
+restriction documented in [OpenAI Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs).
+Claude retains the full schema. Raw process logs and actual IDs are kept per
+attempt/cycle. Both adapters reject reviewer resume requests.
 
 The controller loads the adapter named in the registry (`adapter:
 module:Class`) for the role being run. A missing or unhealthy configured

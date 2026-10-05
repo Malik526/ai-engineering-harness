@@ -31,6 +31,9 @@ def hook_command() -> str:
 
 class ClaudeAdapter(SubprocessAdapter):
     def build_command(self, request: AgentRequest) -> list[str]:
+        reviewer = request.role == "reviewer"
+        if reviewer and request.resume_session_id:
+            raise ValueError("reviewers must start fresh sessions")
         settings = {"hooks": {"PreToolUse": [
             {"matcher": _HOOK_MATCHER, "hooks": [{"type": "command", "command": hook_command()}]}
         ]}}
@@ -38,15 +41,17 @@ class ClaudeAdapter(SubprocessAdapter):
             self.assignment.command, "-p",
             "--output-format", "json",
             "--json-schema", json.dumps(strict_schema(request.report_schema)),
-            "--permission-mode", "acceptEdits",
+            "--permission-mode", "default" if reviewer else "acceptEdits",
             "--permission-prompts", "none",
-            "--allowedTools", _ALLOWED_TOOLS,
-            "--disallowedTools", _DISALLOWED_TOOLS,
+            "--allowedTools", "Read,Glob,Grep" if reviewer else _ALLOWED_TOOLS,
+            "--disallowedTools", _DISALLOWED_TOOLS + (",Bash,Edit,MultiEdit,Write,NotebookEdit,TodoWrite" if reviewer else ""),
             "--settings", json.dumps(settings),
         ]
+        if reviewer:
+            command += ["--tools", "Read,Glob,Grep"]
         if request.resume_session_id:
-            raise NotImplementedError("session resume arrives with the revision loop (phase 0.3)")
-        if request.session_id:
+            command += ["--resume", request.resume_session_id]
+        elif request.session_id:
             command += ["--session-id", request.session_id]
         model = request.model or self.assignment.model
         if model:

@@ -27,9 +27,9 @@ def _states(outcome):
 def test_successful_run_commits_on_run_branch_and_leaves_main(tmp_path, monkeypatch, fake_registry):
     root, outcome, main_before = _run(tmp_path, monkeypatch)
     state = outcome.state
-    assert _states(outcome) == ["READY", "IMPLEMENTING", "VALIDATING", "COMPLETED"]
+    assert _states(outcome) == ["READY", "IMPLEMENTING", "VALIDATING", "REVIEWING", "PASSED", "COMPLETED"]
     assert state["branch"] == "agent/T-1-add-feature-file" and state["parent_branch"] == "main"
-    assert state["review_mode"] == "none" and state["base_commit"] == main_before
+    assert state["review_mode"] == "independent" and state["base_commit"] == main_before
     worktree = Path(state["worktree"])
     assert worktree.parent == tmp_path / "proj.worktrees" and (worktree / "feature.txt").exists()
     # Checkpoint commit on the run branch only; main untouched.
@@ -45,12 +45,12 @@ def test_run_artifacts_follow_contract(tmp_path, monkeypatch, fake_registry):
     _, outcome, _ = _run(tmp_path, monkeypatch)
     run_dir = outcome.run_dir
     for spec in RUN_ARTIFACTS:
-        if spec.path.startswith(("browser/", "review/")):
-            continue  # later phases
-        assert (run_dir / spec.path.rstrip("/")).exists(), spec.path
+        if spec.path.startswith("browser/"):
+            continue  # phase 0.4
+        assert (run_dir / spec.path.replace("NN", "01").rstrip("/")).exists(), spec.path
     result = json.loads((run_dir / "implementation/result.json").read_text())
     assert schema_errors("implementation-result", result) == []
-    assert result["report_status"] == "valid" and result["provider"] == "fake-a" and result["session_id"] == "fake-fake-a"
+    assert result["report_status"] == "valid" and result["provider"] == "fake-a" and result["session_id"]
     validation = json.loads((run_dir / "validation/results.json").read_text())
     assert schema_errors("validation", validation) == [] and validation["producer"] == "controller"
     assert "feature.txt" in (run_dir / "implementation/diff.patch").read_text()
@@ -153,7 +153,7 @@ def test_secret_like_files_block_the_run(tmp_path, monkeypatch, fake_registry):
 
 def test_browser_required_checkpoints_then_stops_at_human_gate(tmp_path, monkeypatch, fake_registry):
     root, outcome, main_before = _run(tmp_path, monkeypatch, browser=True)
-    assert _states(outcome) == ["READY", "IMPLEMENTING", "VALIDATING", "HUMAN_BLOCKED"]
+    assert _states(outcome) == ["READY", "IMPLEMENTING", "VALIDATING", "REVIEWING", "PASSED", "HUMAN_BLOCKED"]
     assert "browser" in outcome.state["human_gate"]["reason"]
     # Validated GREEN work is preserved as a checkpoint on the run branch; main is untouched.
     assert outcome.state["checkpoint"]["committed"] is True

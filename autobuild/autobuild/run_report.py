@@ -21,10 +21,11 @@ def _next_step(state: dict[str, Any], plan: Any) -> str:
         return "; ".join(state["human_gate"]["human_action"])
     if s == "FAILED":
         detail = state["failure"]["detail"] if state.get("failure") else ""
-        return (f"Inspect {worktree} and {plan.run_dir}/logs ({detail}). "
-                "Fix the cause, then start a new run; the worktree is kept until you remove it.")
+        return (f"Inspect {worktree} and {plan.run_dir}/logs ({detail}). " +
+                (f"Fix the cause, then explicitly run autobuild resume {plan.run_dir}." if state.get("failure", {}).get("recoverable")
+                 else "Non-recoverable safety failure; human investigation is required."))
     if s == "STOPPED":
-        return f"Run stopped; worktree {worktree} and its changes are preserved."
+        return f"Run stopped; worktree {worktree} is preserved. Explicit resume: autobuild resume {plan.run_dir}."
     return f"Unexpected final state {s}; inspect {plan.run_dir}."
 
 
@@ -52,6 +53,8 @@ def format_report(state: dict[str, Any], result: Optional[dict[str, Any]], evide
         lines += [f"  {c['name']}: {c['status']}" for c in validation.document["commands"]]
     else:
         lines.append("Validation (controller): not run")
+    if state.get("review_mode") == "independent":
+        lines.append(f"Independent review: {state.get('final_review_status') or 'not decided'}; cycles: {state['review_cycle']}")
     if state.get("last_commit"):
         lines.append(f"Commit: {state['last_commit'][:12]} (controller checkpoint; not pushed or merged)")
     else:

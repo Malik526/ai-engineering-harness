@@ -15,9 +15,11 @@ from autobuild.command_guard import check_file_write, check_shell_command
 _BLOCK = 2
 
 
-def decide(event: dict, worktree: Path) -> str | None:
+def decide(event: dict, worktree: Path, role: str = "implementer") -> str | None:
     """Return a refusal reason for the tool call in `event`, or None to allow it."""
     tool = event.get("tool_name", "")
+    if role == "reviewer" and tool in ("Bash", "Edit", "MultiEdit", "Write", "NotebookEdit", "TodoWrite"):
+        return "reviewers have read access only"
     tool_input = event.get("tool_input") or {}
     if tool == "Bash":
         cwd = Path(event["cwd"]) if event.get("cwd") else worktree
@@ -38,7 +40,7 @@ def main() -> int:
     except json.JSONDecodeError:
         print("autobuild guard: unreadable hook input; refusing tool call", file=sys.stderr)
         return _BLOCK
-    reason = decide(event, Path(worktree))
+    reason = decide(event, Path(worktree), os.environ.get("AUTOBUILD_ROLE", "implementer"))
     if reason:
         print(f"autobuild guard: {reason}", file=sys.stderr)
         return _BLOCK

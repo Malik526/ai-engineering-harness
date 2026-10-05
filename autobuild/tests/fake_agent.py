@@ -9,6 +9,7 @@ import os
 import subprocess
 import sys
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 REPORT = {
@@ -28,12 +29,37 @@ def real_git(*args: str) -> subprocess.CompletedProcess:
 def main() -> int:
     mode = os.environ.get("FAKE_AGENT_MODE", "write")
     prompt = sys.stdin.read()
+    if os.environ.get("AUTOBUILD_ROLE") == "reviewer":
+        cycle = int(os.environ["AUTOBUILD_REVIEW_CYCLE"])
+        sequence = os.environ.get("FAKE_REVIEW_SEQUENCE", "PASS").split(",")
+        status = sequence[min(cycle - 1, len(sequence) - 1)]
+        if status == "WRITE":
+            Path("feature.txt").write_text("reviewer mutation\n")
+            status = "PASS"
+        if status == "INVALID":
+            print("invalid review")
+            return 0
+        if status == "FAIL":
+            return 3
+        report = {"schema_version": 1, "run_id": os.environ["AUTOBUILD_RUN_ID"],
+                  "implementation_id": os.environ["AUTOBUILD_IMPLEMENTATION_ID"], "cycle": cycle,
+                  "status": status, "reviewer": {"provider": "fake-a", "session_id": os.environ["AUTOBUILD_SESSION_ID"]},
+                  "reviewed_at": datetime.now(timezone.utc).isoformat(),
+                  "evidence_reviewed": ["brief", "git_diff", "changed_files", "validation_output"], "findings": []}
+        if status == "REVISE":
+            report["findings"] = [{"id": f"R{cycle}-1", "severity": "major", "requirement": "Correct feature",
+                                   "evidence": "feature.txt needs correction", "affected_files": ["feature.txt:1"],
+                                   "required_correction": "Write corrected feature text"}]
+        if status in ("BLOCK", "BLOCKED"):
+            report["blocked_reason"] = "Human prerequisite missing"
+        print(json.dumps(report))
+        return 0
     if mode == "fail":
         Path("partial.txt").write_text("half-finished work\n")
         print("simulated provider crash", file=sys.stderr)
         return 3
     if mode not in ("noop", "sleep"):
-        Path("feature.txt").write_text("hello from the fake agent\n")
+        Path("feature.txt").write_text("hello from the fake agent\n" + os.environ.get("AUTOBUILD_REVIEW_CYCLE", "0"))
     if mode == "sleep":
         time.sleep(120)
     if mode == "bad_report":

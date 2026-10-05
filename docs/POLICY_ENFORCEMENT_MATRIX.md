@@ -54,6 +54,17 @@ Implementation status:
 
 ## Vendor Capability Reuse
 
+### Autobuild 0.3 Controls (2026-10-04)
+
+Independent review remains semantic judgment backed by deterministic review
+schemas, evidence/identity checks, fresh-session checks across roles/cycles,
+read-only provider execution, content snapshots and a hard invocation budget.
+Only PASS reaches existing controller checkpoint eligibility. Explicit human
+resume verifies the preserved config/brief/worktree/refs/artifacts and retains
+cycle/session history; no automatic gate resume or provider fallback.
+See `autobuild/docs/EVALUATION_0_3.md` and ADR 0003 there. Reviewer judgment and
+ignored-file/process side effects remain gaps, not claims of full confinement.
+
 | Capability | Reused for | Notes |
 | --- | --- | --- |
 | Claude Code PreToolUse hooks | Manual-mode `git commit` guard | The hook asks on direct commits, visible Git aliases, shell `-c`, inline shell alias definitions, and small explicit shell scripts. |

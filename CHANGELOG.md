@@ -2,6 +2,26 @@
 
 ## 2026-10-04
 
+### Autobuild 0.3 - Independent Review, Revisions And Explicit Resume
+
+- Added provider-neutral fresh review after controller validation: structured
+  PASS/REVISE/BLOCK, resumed implementer corrections, revalidation and a hard
+  review invocation limit. Same-provider roles use independent reviewer sessions.
+- Preserved per-attempt Git trees/diffs, validation/process logs and per-cycle
+  decisions/history. Only PASS reaches existing controller checkpoint eligibility;
+  BLOCK/budget exhaustion preserve uncommitted work at HUMAN_BLOCKED.
+- Claude/Codex support read-only reviewers and implementer session resume. Codex
+  projects its API wire schema while retaining full local contract validation.
+  Explicit CLI resume checks frozen config/brief, worktree/HEAD/refs and artifacts.
+- Added review/resume safety fixtures; updated architecture, runner/provider/
+  artifact/safety docs, templates, enforcement matrix and ADR 0003.
+- Validation: 308 combined regression tests, CLI core check, installed policy
+  audit and diff checks pass.
+- Live Codex REVISE -> resumed fix -> revalidate -> fresh PASS completed with
+  unchanged fixture main; explicit recovery retained earlier failed-review history.
+  Claude-to-Codex live completion remains blocked by Claude's HTTP 429/session
+  quota, with no fallback/checkpoint. See `autobuild/docs/EVALUATION_0_3.md`.
+
 ### Manual Development - Shared Completion Evidence
 
 - Added a shared lightweight completion check with Git snapshots, validation

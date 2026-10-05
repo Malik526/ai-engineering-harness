@@ -23,7 +23,7 @@ agents:                      # any registry provider may fill any role it suppor
 git:
   protected_branches: [main]
   branch_prefix: agent/
-  checkpoint_commits: false  # true: controller commits on the run branch after validation passes
+  checkpoint_commits: false  # true: eligible controller commit after validation and independent PASS
   # default_base_branch: main
   # worktree_root: ../example.worktrees   # default: <project>.worktrees beside the project
 
@@ -37,6 +37,7 @@ limits:
   max_review_cycles: 3
   max_consecutive_implementations: 5
   implementer_timeout_seconds: 3600
+  reviewer_timeout_seconds: 3600
 
 validation:
   browser_tool: none         # none | playwright | agent-browser

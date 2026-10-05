@@ -52,7 +52,8 @@ def git(cwd: Path, *args: str) -> str:
 
 
 def make_project(tmp_path: Path, *, provider: str = "fake-a", commands: Optional[list[dict[str, Any]]] = None,
-                 checkpoint: bool = True, browser: bool = False, extra_git: Optional[dict[str, Any]] = None) -> tuple[Path, Path]:
+                 checkpoint: bool = True, browser: bool = False, extra_git: Optional[dict[str, Any]] = None,
+                 reviewer: Optional[str] = None, max_cycles: int = 3) -> tuple[Path, Path]:
     """Create <tmp>/proj on main with a GREEN brief; return (project root, brief path)."""
     root = tmp_path / "proj"
     (root / "docs" / "decisions").mkdir(parents=True)
@@ -68,12 +69,12 @@ def make_project(tmp_path: Path, *, provider: str = "fake-a", commands: Optional
         "version": 1,
         "project": {"name": "Fixture"},
         "agents": {"planner": {"provider": provider}, "implementer": {"provider": provider},
-                   "reviewer": {"provider": provider}},
+                   "reviewer": {"provider": reviewer or provider}},
         "git": {"protected_branches": ["main"], "branch_prefix": "agent/", "checkpoint_commits": checkpoint,
                 **(extra_git or {})},
         "paths": {"roadmap": "docs/roadmap", "project_state": "PROJECT_STATE.md",
                   "adr_directory": "docs/decisions", "runs_directory": ".autobuild/runs"},
-        "limits": {"max_review_cycles": 3, "max_consecutive_implementations": 5, "implementer_timeout_seconds": 60},
+        "limits": {"max_review_cycles": max_cycles, "max_consecutive_implementations": 5, "implementer_timeout_seconds": 60},
         "validation": {"browser_tool": "none", "require_clean_git_before_start": True,
                        "commands": DEFAULT_COMMANDS if commands is None else commands},
         "notifications": {"enabled": False, "provider": "console"},

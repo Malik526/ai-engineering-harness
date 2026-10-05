@@ -1,14 +1,17 @@
-# Single Implementation Runner (Phase 0.2)
+# Independent Review Runner (Phase 0.3)
 
-`autobuild run` takes one approved brief through one implementation and stops
+`autobuild run` takes one approved brief through implementation and review and stops
 for the human:
 
 ```text
 brief → preflight → branch + worktree → configured implementer → git evidence
-      → controller validation → checkpoint commit (if enabled) → STOP
+      → controller validation → fresh reviewer → PASS → eligible checkpoint → STOP
+                                REVISE → resume implementer → revalidate → fresh reviewer
+                                BLOCK / cycle limit → HUMAN_BLOCKED
 ```
 
-There is no review loop, retry, repair or rollover yet (0.3 and later).
+The bounded review loop is implemented. There is no automatic recovery of failed
+validation/provider calls and no roadmap rollover, merge, push or deployment.
 
 ## Usage
 
@@ -17,6 +20,8 @@ cd <project>
 ~/.agents/autobuild/bin/autobuild run docs/roadmap/M4.2.md --dry-run   # preflight only
 ~/.agents/autobuild/bin/autobuild run docs/roadmap/M4.2.md             # asks before starting
 ~/.agents/autobuild/bin/autobuild run docs/roadmap/M4.2.md --yes --base agent/M4.1-auth
+~/.agents/autobuild/bin/autobuild resume <run-id-or-directory> --dry-run
+~/.agents/autobuild/bin/autobuild resume <run-id-or-directory>
 ```
 
 Before starting it prints the implementation, autonomy, implementer (with
@@ -32,7 +37,7 @@ nothing.
 1. Project config validates, including role → provider assignments.
 2. Brief validates (schema plus required sections).
 3. Autonomy gate: GREEN, `status: ready`, dependencies done. Dependencies count as done when a sibling brief in the same directory has that `id` and `status: done`.
-4. The configured implementer's adapter loads and its health check passes. Autobuild never switches to another provider.
+4. Both configured implementer and reviewer adapters load and pass health checks. Autobuild never switches providers.
 5. The project root is a git top level, with no merge or rebase in progress, and a clean working tree when `require_clean_git_before_start` is set.
 6. The base branch exists and is either protected (e.g. `main`) or an automation branch (`<branch_prefix>*`). The run branch is never protected.
 7. `project_state` and `adr_directory` exist. A missing `roadmap` is only a warning.
@@ -94,8 +99,9 @@ supports:
 | `paths` | fnmatch patterns. The command runs only if a changed file matches; otherwise it's recorded as `skipped` |
 
 All commands run even after a failure. Results, with stdout and stderr logs,
-go to `validation/`. If validation changes the worktree, that's recorded in
-`validation/worktree-status-after.txt`. A failed required command ends the run
+go to `validation/cycle-NN/` with a latest `validation/results.json`. If validation
+changes the implementation snapshot, the run fails as non-recoverable; build
+outputs must be ignored. Branch/HEAD/protected refs are checked too. A failed required command ends the run
 `FAILED`. No repair is attempted.
 
 **Browser validation** isn't implemented yet (0.4). A brief with
@@ -106,7 +112,8 @@ is still checkpointed on the run branch when the checkpoint rules allow it.
 ## Commits
 
 Agents never commit; only the controller does, and it never asks the human
-first. A checkpoint is a commit on the isolated run branch, not a merge, push
+first. The runner reaches checkpoint eligibility only after independent PASS.
+A checkpoint is a commit on the isolated run branch, not a merge, push
 or release. `autobuild/checkpoint_policy.py` decides, and the decision and
 reason are recorded in `state.json` → `checkpoint` and in the report. The
 controller commits only when all of these hold:
@@ -127,14 +134,59 @@ checkpoint. Outside Autobuild, manual development never commits automatically
 
 | Final state | When |
 | --- | --- |
-| `COMPLETED` | Validation passed; committed if enabled. Unreviewed: the human reviews and merges |
+| `COMPLETED` | Controller validation and independent review passed; checkpointed if eligible. Human owns merge |
 | `FAILED` | Provider crash or timeout, no changes, agent commit, branch moved, protected ref moved, secret-like files, validation failure, controller error. `failure.reason` names which |
-| `HUMAN_BLOCKED` | Browser validation required. Validated work is checkpointed first if the rules allow it |
+| `HUMAN_BLOCKED` | Review BLOCK, exhausted review budget, or browser requirement. Only a PASS may reach checkpoint eligibility |
 | `STOPPED` | Ctrl-C: the provider process group is terminated and the state recorded. Remote stop arrives in 0.6 |
 
 Every run ends with a summary (also saved as `report.md`): implementation,
 provider, status, branch, worktree, files changed, controller validation,
 commit, known issues reported by the implementer, and the human's next step.
+
+## Independent Review And Revision
+
+Every review gets a new adapter and fresh session, including same-provider
+roles. Actual returned session IDs must differ from every prior reviewer and
+implementer session. Evidence-first prompts include the frozen approved brief,
+actual binary diff, changed files, controller validation and relevant project
+instruction/state/ADR/architecture pointers. Implementer narrative comes last.
+
+The full review schema enforces PASS / REVISE / BLOCK (legacy BLOCKED accepted).
+REVISE carries structured findings with ID, severity, requirement, evidence,
+files/locations and correction. The controller persists JSON/Markdown, resumes
+the existing implementer with findings plus necessary context, snapshots the
+new work, reruns validation and starts a fresh reviewer. A maximum of
+`limits.max_review_cycles` invocations prevents infinite loops. BLOCK and budget
+exhaustion preserve all work without a checkpoint and require human action.
+
+Codex reviewers use read-only sandboxing with approvals disabled. Claude
+reviewers have only Read/Glob/Grep, with Bash/edit/write/web tools denied and a
+role-aware hook. The Git shim denies reviewer index/file writes. Controller
+tree comparisons detect tracked/non-ignored worktree changes even if a provider
+bypasses its restrictions. Ignored outputs and arbitrary process side effects
+are not a universal audit boundary; see `SAFETY_MODEL.md`.
+
+## Explicit Resume
+
+`autobuild resume RUN [--project DIR] [--dry-run]` is a human command, never an
+automatic transition. It accepts STOPPED, recoverable FAILED and HUMAN_BLOCKED;
+COMPLETED, active and non-recoverable runs are refused. Legacy 0.2 runs lack the
+required safety records and cannot resume. Resume preserves run ID, worktree,
+branch, session IDs and numbered artifacts, enters READY with human authority,
+resumes the implementer, then validates and uses a new reviewer.
+
+Preflight verifies the frozen brief hash, recorded branch/HEAD/repository,
+protected refs, artifact presence, no Git operation/secret-like changes, and
+configured providers. Execution configuration must match the frozen copy;
+only `max_review_cycles` can change. Exhausted budgets require an explicit
+human increase (schema maximum 10); prior cycles are never reset. A surviving
+`.controller.lock` must be investigated before a human removes it. Missing
+provider sessions fail clearly without fallback to a new session/provider.
+
+Browser evidence remains a manual gate in 0.3. Resume does not certify a browser
+requirement or silently mark it fulfilled: such runs stop at that gate again.
+Protected refs changed by unrelated human work also block resume; start a new
+run rather than silently rebasing preserved work.
 
 ## Live Verification Fixtures
 

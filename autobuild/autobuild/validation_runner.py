@@ -94,9 +94,10 @@ def _run_one(spec: dict[str, Any], index: int, project_root: Path, worktree: Pat
 
 
 def run_validation(*, run_id: str, commands: Sequence[dict[str, Any]], project_root: Path, worktree: Path,
-                   changed_files: Sequence[str], run_dir: Path) -> ValidationOutcome:
+                   changed_files: Sequence[str], run_dir: Path,
+                   logs_subdirectory: str = "validation/logs") -> ValidationOutcome:
     """Run every command in order (all of them, so one failure does not hide others)."""
-    logs_dir = run_dir / "validation" / "logs"
+    logs_dir = run_dir / logs_subdirectory
     logs_dir.mkdir(parents=True, exist_ok=True)
     results = []
     for index, spec in enumerate(commands, start=1):

@@ -9,7 +9,9 @@
     autobuild gate FILE [--done ID,...]     show the autonomy gate decision for a brief
     autobuild agents [PROJECT]              show which provider fills each role
     autobuild run BRIEF [--project DIR] [--base BRANCH] [--yes] [--dry-run]
-                                            run one approved implementation (phase 0.2)
+                                            implement, validate and independently review one brief
+    autobuild resume RUN [--project DIR] [--dry-run]
+                                            explicitly continue a preserved recoverable run
     autobuild fixture create --implementer ID [--name NAME]   disposable live-test fixture
     autobuild fixture list                                    fixtures and ownership checks
     autobuild fixture clean [NAME...|--all] [--legacy PATH...] [--yes]
@@ -146,6 +148,7 @@ def _run(brief: Path, project: Optional[Path], base: Optional[str], assume_yes: 
     print(f"Implementation: {plan.meta['id']} — {plan.meta['title']}")
     print(f"Autonomy: {plan.meta['autonomy'].upper()}")
     print(f"Implementer: {plan.assignment.provider} ({plan.assignment.display_name}, {plan.health.version or 'version unknown'})")
+    print(f"Reviewer: {plan.reviewer_assignment.provider} (fresh session each cycle)")
     print(f"Base branch: {plan.base_branch} @ {plan.base_commit[:12]}")
     print(f"Target branch: {plan.branch}")
     print(f"Worktree: {plan.worktree}")
@@ -163,6 +166,28 @@ def _run(brief: Path, project: Optional[Path], base: Optional[str], assume_yes: 
             return 1
     outcome = Runner(plan).run()
     print()
+    print(outcome.report, end="")
+    return 0 if outcome.state["state"] == "COMPLETED" else 1
+
+
+def _resume(run: Path, project: Optional[Path], dry_run: bool) -> int:
+    from autobuild.git_client import GitClient
+    from autobuild.preflight import PreflightError
+    from autobuild.resume import resume_preflight
+    from autobuild.runner import Runner
+
+    root = project or GitClient(Path.cwd(), ()).toplevel(Path.cwd()) or Path.cwd()
+    try:
+        plan = resume_preflight(run, root)
+    except PreflightError as exc:
+        print("Autobuild did not resume. No branch or worktree was modified.")
+        for issue in exc.issues:
+            print(f"  - {issue}")
+        return 1
+    if dry_run:
+        print(f"Resume preflight passed for {plan.run_id}; nothing was modified.")
+        return 0
+    outcome = Runner(plan).run()
     print(outcome.report, end="")
     return 0 if outcome.state["state"] == "COMPLETED" else 1
 
@@ -249,6 +274,10 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--base", help="branch to start from (default: git.default_base_branch or the first protected branch)")
     p.add_argument("--yes", action="store_true", help="do not ask for confirmation")
     p.add_argument("--dry-run", action="store_true", help="run preflight only")
+    p = sub.add_parser("resume")
+    p.add_argument("run", type=Path)
+    p.add_argument("--project", type=Path)
+    p.add_argument("--dry-run", action="store_true")
     p = sub.add_parser("fixture")
     fixture_sub = p.add_subparsers(dest="action", required=True)
     f = fixture_sub.add_parser("create")
@@ -268,6 +297,8 @@ def main(argv: list[str] | None = None) -> int:
         return _fixture(args)
     if args.command == "run":
         return _run(args.brief, args.project, args.base, args.yes, args.dry_run)
+    if args.command == "resume":
+        return _resume(args.run, args.project, args.dry_run)
     if args.command == "check":
         ok = _check_core()
     elif args.command == "config":

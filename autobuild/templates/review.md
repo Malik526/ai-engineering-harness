@@ -7,13 +7,14 @@ implementer's summary last and do not accept its claims without evidence.
 -->
 # Review <NN> — <implementation id>
 
-**Status:** PASS | REVISE | BLOCKED
+**Status:** PASS | REVISE | BLOCK
 
 ## Evidence Examined
 
 - Brief (sha256 matches state.json): yes/no
 - Diff: `implementation/diff.patch`
-- Validation: `implementation/validation.json` (producer: controller/implementer)
+- Changed files: `implementation/cycle-<attempt>/changed-files.txt`
+- Validation: `validation/cycle-<attempt>/results.json` (producer: controller)
 - Browser evidence: present / not required / missing
 
 ## Findings
@@ -27,4 +28,4 @@ implementer's summary last and do not accept its claims without evidence.
 
 ## Blocked Reason
 
-BLOCKED only: what the human must decide or provide.
+BLOCK only: what the human must decide or provide. Legacy BLOCKED is accepted.

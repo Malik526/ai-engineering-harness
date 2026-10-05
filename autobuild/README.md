@@ -1,10 +1,10 @@
 # Autobuild
 
 The deterministic control plane for planner → implementer → independent
-reviewer workflows. **Phase 0.2:** contracts and validators, plus the single
-implementation runner (`autobuild run`), which takes one approved brief
-through an isolated worktree, the configured implementer, and
-controller-owned validation, then stops for the human (`docs/RUNNER.md`).
+reviewer workflows. **Phase 0.3:** one approved brief in an isolated worktree,
+controller validation, fresh independent review, bounded revision via resumed
+implementer sessions, and explicit human resume (`docs/RUNNER.md`). PASS reaches
+eligible controller checkpointing, then stops for the human. No roadmap rollover.
 
 Read `docs/ARCHITECTURE.md` first.
 
@@ -47,6 +47,7 @@ autobuild review FILE... | validation FILE...
 autobuild gate FILE --done ID,...       # autonomy gate decision for a brief
 autobuild agents [PROJECT]              # resolved role -> provider assignment
 autobuild run BRIEF [--dry-run] [--yes] [--base BRANCH] [--project DIR]
+autobuild resume RUN [--dry-run] [--project DIR]
 autobuild fixture create --implementer ID | list | clean [NAME...|--all] [--legacy PATH...] [--yes]
 ```
 

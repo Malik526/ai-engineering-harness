@@ -39,7 +39,7 @@ _FORWARD: dict[RunState, frozenset[RunState]] = {
     S.VALIDATING: frozenset({S.REVIEWING, S.REVISING, S.COMPLETED, S.HUMAN_BLOCKED, S.FAILED}),
     S.REVIEWING: frozenset({S.PASSED, S.REVISING, S.HUMAN_BLOCKED, S.FAILED}),
     S.REVISING: frozenset({S.VALIDATING, S.HUMAN_BLOCKED, S.FAILED}),
-    S.PASSED: frozenset({S.COMPLETED, S.FAILED}),
+    S.PASSED: frozenset({S.COMPLETED, S.HUMAN_BLOCKED, S.FAILED}),
     S.HUMAN_BLOCKED: frozenset(),
     S.FAILED: frozenset(),
     S.STOP_REQUESTED: frozenset({S.STOPPED}),

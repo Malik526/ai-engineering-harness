@@ -67,3 +67,25 @@ cooperating.
 Agents never receive secrets through briefs, artifacts or notifications. When
 an item needs a new credential it is YELLOW, and the human adds the secret
 through the project's approved mechanism. Run directories are git-ignored.
+
+## Independent Review And Resume (0.3)
+
+Reviewers have no code-edit authority: Codex uses read-only sandboxing with
+approval escalation disabled; Claude allows Read/Glob/Grep only, denies shell,
+edit/write/web tools, and uses a role-aware refusal hook. The Git shim refuses
+reviewer index/file writes. After validation and review, the controller compares
+snapshot trees, branch/HEAD, frozen brief hash and protected refs. A mutation
+fails without committing or restoring potentially valuable work.
+
+These are layered controls, not proof against arbitrary hostile processes.
+Snapshots exclude ignored outputs and do not monitor external side effects.
+Claude implementer Bash still has the 0.2 OS-confinement gap when bubblewrap/
+socat are unavailable. Secret checks remain filename-based, not content scanning.
+Provider authentication/quota failures fail clearly, never trigger fallback.
+
+Fresh reviewer identities are checked across cycles and against implementers.
+Budgets count all review invocations. Only PASS reaches checkpoint eligibility;
+BLOCK/limits stop HUMAN_BLOCKED. Explicit resume checks frozen config/brief,
+worktree repository/branch/HEAD, refs and preserved evidence before execution,
+and an exclusive run lock prevents concurrent controllers. It never certifies
+browser evidence or automatically clears a human gate. See ADR 0003.

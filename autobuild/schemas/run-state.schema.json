@@ -42,6 +42,41 @@
         "reason": { "type": "string", "minLength": 1 }
       }
     },
+    "protected_refs": {
+      "type": "object", "additionalProperties": { "type": ["string", "null"] }
+    },
+    "review_history": {
+      "type": "array", "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["cycle", "status", "provider", "session_id", "artifact", "snapshot_tree", "validation_artifact", "at"],
+        "properties": {
+          "cycle": { "type": "integer", "minimum": 1 },
+          "status": { "enum": ["PASS", "REVISE", "BLOCK"] },
+          "provider": { "$ref": "#/$defs/provider_id" },
+          "session_id": { "type": "string", "minLength": 1 },
+          "artifact": { "type": "string", "minLength": 1 },
+          "snapshot_tree": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+          "validation_artifact": { "type": "string", "minLength": 1 },
+          "at": { "$ref": "#/$defs/timestamp" }
+        }
+      }
+    },
+    "revision_history": {
+      "type": "array", "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["attempt", "cycle", "session_id", "resume_session_id", "artifact_directory", "started_at", "ended_at"],
+        "properties": {
+          "attempt": { "type": "integer", "minimum": 1 },
+          "cycle": { "type": "integer", "minimum": 0 },
+          "session_id": { "type": "string", "minLength": 1 },
+          "resume_session_id": { "type": ["string", "null"] },
+          "artifact_directory": { "type": "string", "minLength": 1 },
+          "started_at": { "$ref": "#/$defs/timestamp" },
+          "ended_at": { "oneOf": [{ "$ref": "#/$defs/timestamp" }, { "type": "null" }] }
+        }
+      }
+    },
+    "final_review_status": { "enum": [null, "PASS", "REVISE", "BLOCK"] },
     "review_mode": {
       "description": "none = implementation-only run (phase 0.2), ends unreviewed and waits for the human; independent = the run must pass a fresh reviewer before completing.",
       "enum": ["none", "independent"]

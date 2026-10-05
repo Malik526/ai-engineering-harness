@@ -3,6 +3,7 @@
 import json
 import os
 from pathlib import Path
+from dataclasses import replace
 
 import pytest
 
@@ -81,7 +82,7 @@ def test_codex_command(tmp_path):
     request = _request(tmp_path)
     request.output_directory.mkdir()
     command = CodexAdapter(_assignment("codex", "codex")).build_command(request)
-    assert command[:2] == ["codex", "exec"] and command[-1] == "-"
+    assert command[:4] == ["codex", "--ask-for-approval", "never", "exec"] and command[-1] == "-"
     assert command[command.index("--sandbox") + 1] == "workspace-write"
     assert command[command.index("--cd") + 1] == str(tmp_path)
     schema = json.loads(Path(command[command.index("--output-schema") + 1]).read_text())
@@ -89,10 +90,35 @@ def test_codex_command(tmp_path):
 
 
 @pytest.mark.parametrize("adapter_class", [ClaudeAdapter, CodexAdapter])
-def test_resume_not_supported_yet(tmp_path, adapter_class):
+def test_resume_command(tmp_path, adapter_class):
     (tmp_path / "out").mkdir()
-    with pytest.raises(NotImplementedError):
-        adapter_class(_assignment("x", "x")).build_command(_request(tmp_path, resume_session_id="s"))
+    command = adapter_class(_assignment("x", "x")).build_command(_request(tmp_path, resume_session_id="s"))
+    flag = "resume" if adapter_class is CodexAdapter else "--resume"
+    assert command[command.index(flag) + 1] == "s"
+    assert "--session-id" not in command
+
+
+@pytest.mark.parametrize("adapter_class", [ClaudeAdapter, CodexAdapter])
+def test_review_command_is_read_only_and_fresh(tmp_path, adapter_class):
+    (tmp_path / "out").mkdir()
+    request = replace(_request(tmp_path), role="reviewer", report_schema=load_schema("review"))
+    adapter = adapter_class(_assignment("x", "x"))
+    command = adapter.build_command(request)
+    if adapter_class is CodexAdapter:
+        assert command[command.index("--sandbox") + 1] == "read-only"
+        assert command[command.index("--ask-for-approval") + 1] == "never"
+    else:
+        assert command[command.index("--allowedTools") + 1] == "Read,Glob,Grep"
+        assert command[command.index("--tools") + 1] == "Read,Glob,Grep"
+        assert "Bash" in command[command.index("--disallowedTools") + 1]
+        assert command[command.index("--permission-mode") + 1] == "default"
+    with pytest.raises(ValueError, match="fresh"):
+        adapter.build_command(replace(request, resume_session_id="s"))
+
+
+@pytest.mark.parametrize("tool", ["Bash", "Edit", "Write", "MultiEdit", "NotebookEdit", "TodoWrite"])
+def test_review_hook_refuses_mutations(tmp_path, tool):
+    assert decide({"tool_name": tool, "tool_input": {}}, tmp_path, "reviewer")
 
 
 # --- Output parsing ---
@@ -121,6 +147,28 @@ def test_codex_parses_events_and_last_message(tmp_path):
     (request.output_directory / "codex-last-message.txt").write_text(json.dumps({"implementation_summary": 1}))
     _, report, error = adapter.parse_output(request, events)
     assert report is None and "does not match schema" in error
+
+
+def test_codex_projects_review_shape_but_validates_full_contract(tmp_path):
+    request = replace(_request(tmp_path), role="reviewer", report_schema=load_schema("review"))
+    request.output_directory.mkdir()
+    adapter = CodexAdapter(_assignment("codex", "codex"))
+    command = adapter.build_command(request)
+    wire = json.loads(Path(command[command.index("--output-schema") + 1]).read_text())
+    assert "allOf" not in wire and "allOf" not in wire["properties"]["evidence_reviewed"]
+    assert set(wire["required"]) == set(wire["properties"])
+    review = {"schema_version": 1, "run_id": "run", "implementation_id": "id", "cycle": 1,
+              "status": "PASS", "reviewer": {"provider": "codex", "session_id": "s"},
+              "reviewed_at": "2026-10-04T00:00:00Z", "evidence_reviewed": ["brief", "git_diff"],
+              "findings": [], "blocked_reason": None}
+    last = request.output_directory / "codex-last-message.txt"
+    last.write_text(json.dumps(review))
+    events = tmp_path / "events"
+    events.write_text('{"thread_id":"s"}\n')
+    assert "blocked_reason" not in adapter.parse_output(request, events)[1]
+    review["status"] = "REVISE"
+    last.write_text(json.dumps(review))
+    assert adapter.parse_output(request, events)[1] is None
 
 
 # --- Claude pre-tool hook ---

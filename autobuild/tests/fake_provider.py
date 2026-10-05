@@ -25,7 +25,11 @@ class FakeAdapter(SubprocessAdapter):
         except json.JSONDecodeError as exc:
             return None, None, f"final message is not JSON: {exc}"
         report, error = validate_report(report, request.report_schema)
-        return f"fake-{self.provider_id}", report, error
+        identity = request.resume_session_id or request.session_id
+        if request.role == "reviewer":
+            import os
+            identity = os.environ.get("FAKE_REVIEW_SESSION", identity)
+        return identity, report, error
 
 
 def _entry(name: str, executable: str = sys.executable) -> dict:

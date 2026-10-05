@@ -93,3 +93,13 @@ validation runner/command schema and extracted `secret_files.py` are reused;
 Autobuild controller state and checkpoint behavior remain unchanged. Task-local
 artifacts live outside the repository. ADR 0003 records the invocation boundary
 and its instructional limitation. See `scripts/manual/README.md`.
+
+## Autobuild 0.3
+
+Autobuild now runs bounded independent review and implementer revisions for
+one approved GREEN brief. Provider-neutral orchestration owns fresh reviewer
+identity checks, read-only role controls, per-cycle Git/validation evidence and
+explicit human resume. Only PASS reaches eligible controller checkpointing;
+manual harness development still never commits automatically. No roadmap
+rollover or browser certification is added. Current state and limitations live
+in `autobuild/docs/ARCHITECTURE.md`, `RUNNER.md`, `EVALUATION_0_3.md` and its ADR 0003.

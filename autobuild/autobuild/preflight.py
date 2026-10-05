@@ -20,7 +20,7 @@ from autobuild.git_client import GitClient
 from autobuild.implementations import brief_errors
 from autobuild.provider_loader import ProviderLoadError, load_adapter
 from autobuild.provider_registry import RoleAssignment
-from autobuild.roles import IMPLEMENTER
+from autobuild.roles import IMPLEMENTER, REVIEWER
 from autobuild.safety import is_protected_branch
 from autobuild.validation_runner import command_unavailable
 
@@ -55,6 +55,9 @@ class RunPlan:
     checkpoint_commits: bool
     browser_gate: bool
     warnings: list[str] = field(default_factory=list)
+    reviewer_assignment: Optional[RoleAssignment] = None
+    reviewer_timeout: int = DEFAULT_IMPLEMENTER_TIMEOUT
+    resume_state: Optional[dict[str, Any]] = None
 
 
 def completed_from_siblings(brief_path: Path) -> set[str]:
@@ -110,6 +113,14 @@ def preflight(brief_path: Path, project_root: Path, *, base_branch: Optional[str
         raise PreflightError(issues + [f"Configured implementer: {assignment.provider}", f"Status: unavailable ({exc})"]) from exc
     if not health.available:
         issues += [f"Configured implementer: {assignment.provider}", f"Status: unavailable ({health.detail})"]
+
+    reviewer_assignment = config.agents[REVIEWER]
+    try:
+        reviewer_health = load_adapter(reviewer_assignment).health_check()
+        if not reviewer_health.available:
+            issues += [f"Configured reviewer: {reviewer_assignment.provider}", f"Status: unavailable ({reviewer_health.detail})"]
+    except ProviderLoadError as exc:
+        issues += [f"Configured reviewer: {reviewer_assignment.provider}", f"Status: unavailable ({exc})"]
 
     # 5. Git repository
     git = GitClient(project_root, config.protected_branches)
@@ -174,4 +185,6 @@ def preflight(brief_path: Path, project_root: Path, *, base_branch: Optional[str
         implementer_timeout=config.data["limits"].get("implementer_timeout_seconds", DEFAULT_IMPLEMENTER_TIMEOUT),
         checkpoint_commits=bool(config.data["git"].get("checkpoint_commits", False)),
         browser_gate=browser_gate, warnings=warnings,
+        reviewer_assignment=reviewer_assignment,
+        reviewer_timeout=config.data["limits"].get("reviewer_timeout_seconds", DEFAULT_IMPLEMENTER_TIMEOUT),
     )

@@ -67,3 +67,12 @@ shared evidence check and adapter instruction. See
 [Manual Completion Evaluation](MANUAL_COMPLETION_EVALUATION.md) for fixture
 coverage, regression results and invocation/semantic limitations. The historical
 results above remain unchanged; ADR 0003 records the current architecture.
+
+## 2026-10-04 - Autobuild Independent Review Follow-Up
+
+Autobuild 0.3 adds fresh read-only reviewers, bounded resumed corrections,
+per-cycle evidence and explicit human resume without changing manual-mode
+commit ownership. See [Autobuild 0.3 Evaluation](../autobuild/docs/EVALUATION_0_3.md)
+for fake-provider safety regressions and live Codex REVISE-to-PASS/resume results.
+Fixture main remained unchanged. Live Claude-to-Codex completion is quota-blocked,
+not a passing cross-provider result. The earlier evaluations remain historical.

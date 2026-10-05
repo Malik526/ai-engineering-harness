@@ -94,6 +94,10 @@
         "implementer_timeout_seconds": {
           "description": "Wall-clock limit for one implementer invocation. Defaults to 3600.",
           "type": "integer", "minimum": 60, "maximum": 86400
+        },
+        "reviewer_timeout_seconds": {
+          "description": "Wall-clock limit for one fresh reviewer invocation. Defaults to 3600.",
+          "type": "integer", "minimum": 60, "maximum": 86400
         }
       }
     },

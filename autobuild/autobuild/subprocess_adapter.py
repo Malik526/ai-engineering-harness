@@ -63,8 +63,9 @@ class SubprocessAdapter:
         return ProviderHealth(self.provider_id, True, version, executable)
 
     def start(self, request: AgentRequest) -> None:
-        if self._process is not None:
+        if self._process is not None and self._process.poll() is None:
             raise RuntimeError("adapter already started")
+        self._terminated = False
         request.output_directory.mkdir(parents=True, exist_ok=True)
         self._request = request
         command = self.build_command(request)
@@ -74,10 +75,15 @@ class SubprocessAdapter:
         self._files = [stdin, stdout, stderr]
         self._started_at = time.monotonic()
         # Own process group so terminate() reaches every child the agent spawned.
-        self._process = subprocess.Popen(
-            command, cwd=request.working_directory, stdin=stdin, stdout=stdout, stderr=stderr,
-            env={**os.environ, **request.env}, start_new_session=True,
-        )
+        try:
+            self._process = subprocess.Popen(
+                command, cwd=request.working_directory, stdin=stdin, stdout=stdout, stderr=stderr,
+                env={**os.environ, **request.env}, start_new_session=True,
+            )
+        except OSError:
+            for handle in self._files:
+                handle.close()
+            raise
 
     def get_result(self) -> AgentResult:
         if self._process is None or self._request is None:
@@ -109,6 +115,8 @@ class SubprocessAdapter:
         )
 
     def terminate(self) -> None:
+        for handle in self._files:
+            handle.close()
         process = self._process
         if process is None or process.poll() is not None:
             return

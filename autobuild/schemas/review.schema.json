@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://autobuild.local/schemas/review.schema.json",
   "title": "Independent review result",
-  "description": "runs/<run-id>/review/review-NN.json. Written by the fresh reviewer; its status alone drives PASS / REVISE / BLOCKED.",
+  "description": "runs/<run-id>/review/review-NN.json. Fresh reviewer decision, validated and persisted by the controller: PASS / REVISE / BLOCK (legacy BLOCKED accepted).",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -14,7 +14,7 @@
     "run_id": { "type": "string", "minLength": 1 },
     "implementation_id": { "type": "string", "minLength": 1 },
     "cycle": { "type": "integer", "minimum": 1 },
-    "status": { "enum": ["PASS", "REVISE", "BLOCKED"] },
+    "status": { "enum": ["PASS", "REVISE", "BLOCK", "BLOCKED"] },
     "reviewer": {
       "type": "object",
       "additionalProperties": false,
@@ -79,7 +79,7 @@
       "then": { "properties": { "findings": { "minItems": 1 } } }
     },
     {
-      "if": { "properties": { "status": { "const": "BLOCKED" } } },
+      "if": { "properties": { "status": { "enum": ["BLOCK", "BLOCKED"] } } },
       "then": { "required": ["blocked_reason"] }
     }
   ]
