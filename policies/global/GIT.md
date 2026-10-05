@@ -32,9 +32,12 @@ invocations, scripts the human started — is manual development:
 - Do not run `git commit` unless the human explicitly asks for a commit in the
   current conversation for this change.
 - Finish the work: implementation, validation, documentation reconciliation.
-- End the final message with a completion summary and a line starting
-  `Recommended commit:` followed by the commit message. This applies to every
-  completed change in a Git repository, however small. The human commits.
+- When this task leaves repository changes after validation and documentation
+  reconciliation, end the final message with a line starting `Recommended commit:`
+  followed on the same line by a concise conventional commit message.
+  This applies to every completed repository change, however small, unless the
+  human explicitly requested its commit. Omit the line when there are no
+  changes requiring a commit. The human commits.
 - An explicit request covers only the change it names; it is not standing
   permission for later work.
 
@@ -51,9 +54,7 @@ Verification:
 - Production build passes.
 - Mobile and desktop routes verified.
 
-Recommended commit:
-
-`fix: refine portfolio navigation and mobile layout`
+Recommended commit: fix: refine portfolio navigation and mobile layout
 ```
 
 ### Autobuild runs

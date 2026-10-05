@@ -1,0 +1,13 @@
+{
+  "permissions": {"ask": ["Bash(git commit *)"]},
+  "hooks": {
+    "PreToolUse": [{
+      "matcher": "Bash",
+      "hooks": [{
+        "type": "command",
+        "command": "python3 {commit_hook} # AI Engineering Harness: commit guard",
+        "timeout": 10
+      }]
+    }]
+  }
+}

@@ -5,6 +5,8 @@ Run: autobuild/.venv/bin/python -m pytest scripts/tests
 
 import importlib.util
 import json
+import shutil
+import sys
 from pathlib import Path
 
 AUDIT = Path(__file__).resolve().parents[1] / "setup" / "audit_instructions.py"
@@ -12,6 +14,7 @@ POLICIES = ("CODING", "DOCUMENTATION", "EXECUTION", "GIT", "SECURITY", "VERIFICA
 
 
 def _load_module():
+    sys.path.insert(0, str(AUDIT.parent))
     spec = importlib.util.spec_from_file_location("audit_instructions", AUDIT)
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
@@ -21,6 +24,10 @@ def _load_module():
 
 def _configure_fake_install(module, monkeypatch, tmp_path, *, omit_from_matrix: str | None = None):
     repo = tmp_path / "repo"
+    shutil.copytree(AUDIT.parents[2] / "runtime", repo / "runtime")
+    hook_dir = repo / "scripts/hooks"
+    hook_dir.mkdir(parents=True)
+    (hook_dir / "git_commit_guard.py").write_text("# test hook\n")
     policy_dir = repo / "policies" / "global"
     policy_dir.mkdir(parents=True)
     docs = repo / "docs"
@@ -46,7 +53,7 @@ def _configure_fake_install(module, monkeypatch, tmp_path, *, omit_from_matrix: 
         "permissions": {"ask": ["Bash(git commit *)"]},
         "hooks": {"PreToolUse": [{
             "matcher": "Bash",
-            "hooks": [{"type": "command", "command": "python3 /repo/scripts/hooks/git_commit_guard.py"}],
+            "hooks": [{"type": "command", "command": f"python3 {repo}/scripts/hooks/git_commit_guard.py"}],
         }]},
     }))
     codex_rules = home / ".codex" / "rules" / "default.rules"
@@ -73,8 +80,7 @@ def _configure_fake_install(module, monkeypatch, tmp_path, *, omit_from_matrix: 
         "claude": (claude_adapter, "@~/.agents/{name}.md"),
         "codex": (codex_adapter, "~/.agents/{name}.md"),
     })
-    monkeypatch.setattr(module, "CLAUDE_SETTINGS", claude_settings)
-    monkeypatch.setattr(module, "CODEX_RULES", codex_rules)
+    assert not any(row.startswith("CONFLICT") for row in module.reconcile(repo, home, ["claude", "codex"], apply=True))
 
 
 def test_instruction_audit_passes_complete_fake_install(tmp_path, monkeypatch):
@@ -83,7 +89,7 @@ def test_instruction_audit_passes_complete_fake_install(tmp_path, monkeypatch):
 
     assert module.audit() == []
     assert module.audit_policy_matrix() == []
-    assert module.audit_commit_guards() == []
+    assert module.audit_commit_guards(["claude", "codex"]) == []
 
 
 def test_instruction_audit_catches_policy_missing_from_matrix(tmp_path, monkeypatch):
@@ -91,7 +97,7 @@ def test_instruction_audit_catches_policy_missing_from_matrix(tmp_path, monkeypa
     _configure_fake_install(module, monkeypatch, tmp_path, omit_from_matrix="SECURITY")
 
     assert module.audit() == []
-    assert module.audit_commit_guards() == []
+    assert module.audit_commit_guards(["claude", "codex"]) == []
     assert module.audit_policy_matrix() == [
         "policy matrix does not cover policies/global/SECURITY.md"
     ]

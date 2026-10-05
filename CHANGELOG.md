@@ -2,6 +2,62 @@
 
 ## 2026-10-04
 
+### Manual Development - Shared Completion Evidence
+
+- Added a shared lightweight completion check with Git snapshots, validation
+  fingerprints, explicit documentation/validation applicability reconciliation,
+  PASS/NEEDS_ATTENTION and the canonical Git-policy commit-recommendation flag.
+- Both owned runtime adapters invoke the same manifest-installed script. No
+  autonomous branches, commits, controller loop or provider stop hook was added.
+- Reused the existing validation runner/command schema; extracted the unchanged
+  secret-like filename guard for shared use. Autobuild markers return SKIP.
+- Documented the evidence contract, architecture decision, enforcement matrix
+  and fixture evaluation; invocation and semantic correctness remain instructional.
+- Validation: 265 automated fixtures pass across harness and Autobuild, including
+  20 manual-completion cases; installed adapter audit and diff checks pass.
+
+
+### Runtime - Portable Guard Ownership and Completion Adapter
+
+- Added canonical Claude settings, Codex prompt rules and thin adapter fragments
+  under `runtime/`; full personal configuration and authentication remain outside
+  Git. ADR 0002 records ownership and provider-independent core installation.
+- Setup now detects available provider executables, merges owned fragments,
+  preserves unrelated settings/rules/routing, repairs stale marked definitions,
+  refuses conflicts and supports explicit `--check` and isolated `--home`.
+  Provider configuration-root overrides are honored on the real home.
+- Installer/audit share reconciliation; audits distinguish PASS, MISSING, STALE,
+  CONFLICT and absent-provider SKIP. Checks include the exact canonical Claude
+  hook, overlapping permissions, Codex rule drift/forbidden prefixes and global
+  adapter overrides. Core setup supports either, both or neither provider.
+- Codex's adapter references the canonical Git completion rule. `GIT.md` clarifies
+  that the final recommendation is one line and omitted without pending changes
+  or when the human explicitly requested the commit.
+- Claude's hook now inspects Git aliases through read-only config queries, visible
+  shell alias definitions, shell command strings and bounded explicit shell
+  scripts. Codex rules also cover separate global options and standard absolute
+  Git paths. Opaque subprocesses remain outside guard coverage.
+- Updated README, installation, architecture and enforcement matrix; added runtime
+  operations docs and an opt-in reproducible manual-fixture evaluator.
+
+### Runtime - Portability and Completion Evaluation
+
+- Fresh-home automated fixtures cover Claude-only, Codex-only, mixed and no-provider
+  setups, read-only checks, idempotence, preservation, drift and conflict refusals.
+- Codex CLI 0.160.0: 3/3 completed manual edits made no commit, loaded all six
+  policies in traces and ended with the required recommendation line. A read-only
+  fixture omitted the line; a staged explicit commit reached the approval rule
+  and was refused with unattended approvals disabled.
+- Claude Code 2.1.289: the live manual edit made no commit and included the final
+  recommendation. Its explicit-commit live fixture was blocked by the provider
+  session limit before execution; direct registered-hook checks returned ask for
+  ordinary, inline-alias and shell-wrapped commits and passed a status read.
+- `docs/RUNTIME_GUARD_EVALUATION.md` records evidence, infrastructure failures,
+  small-sample limits and known bypasses without claiming airtight prevention.
+- Validation: 71 harness script tests and 174 unchanged Autobuild regression
+  tests passed; installed-provider setup check, instruction audit and diff
+  whitespace check passed.
+
 ### Policies - Enforcement Matrix and Deterministic Audit
 
 - Added `docs/POLICY_ENFORCEMENT_MATRIX.md` as the authoritative classification

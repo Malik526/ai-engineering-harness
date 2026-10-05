@@ -14,14 +14,19 @@ absolute symlinks in runtime locations
   ~/.claude/skills/<skill>       ← skills/custom/<skill>
         │
         ▼
-thin runtime adapters (not in this repo)
+runtime adapters with owned reference blocks (fragments in runtime/)
   ~/.claude/CLAUDE.md   imports  ~/.agents/*.md
   ~/.codex/AGENTS.md    points to ~/.agents/*.md
+
+runtime/claude/settings.fragment.json → merged into Claude user settings
+runtime/codex/default.rules           → marked section in Codex user rules
 ```
 
 Edits always happen in this repository. A runtime path that's a symlink into
 this repo is a view, not a copy. `install.py` (check mode) reports any
-runtime path that has drifted into an independent copy.
+runtime path that has drifted into an independent copy. The same installer
+reconciles harness-owned runtime fragments for installed providers, preserving
+unrelated user configuration. Missing providers are optional.
 
 ## Policy Enforcement Model
 
@@ -48,14 +53,16 @@ A sync/copy script was rejected because copies drift, and a copied file
 edited in a runtime location would silently lose its changes on the next
 sync.
 
-### Why the Adapters Stay Outside
+### Adapter And Guard Ownership
 
 `~/.claude/CLAUDE.md` and `~/.codex/AGENTS.md` are runtime adapters. They hold
 the runtime-specific wording and routing, and import the shared policy by
 path. Keeping them per-runtime lets each vendor's file format and loading
-rules change without touching the canonical policy. Because they reference
-the stable `~/.agents/*.md` paths, moving the policies into this repo didn't
-require editing either adapter.
+rules change without touching the canonical policy. The canonical managed
+sections and runtime guard definitions now live in `runtime/`; only those
+sections are reconciled into local configuration. Full runtime files remain
+outside Git. Codex's adapter reminder points to the canonical Git completion
+rule rather than restating it. ADR 0002 records this ownership decision.
 
 ## Ownership Classes
 
@@ -64,7 +71,8 @@ require editing either adapter.
 | Custom | global policies, custom skills, autobuild | Yes, canonical |
 | Customized vendor | upstream skill with local edits | Yes, under `skills/customized/` with provenance |
 | Vendor | installer-managed skills (`.skill-lock.json`), claude.ai-synced skills | No |
-| Runtime | sessions, caches, logs, auth, memory, CLI config | No |
+| Harness runtime definitions | guard fragments, prompt rules, policy-reference adapter blocks | Yes, under `runtime/` |
+| Runtime | sessions, caches, logs, auth, memory, full user CLI config | No |
 | Project-specific | roadmaps, ADRs, project skills | No, lives in the project repo |
 
 ## Relationship to Project Repositories
@@ -74,3 +82,14 @@ their own `AGENTS.md`, roadmap, project state, ADRs and changelog. They
 consume the harness through the global policies and skills, and later through
 `autobuild`'s per-project `.autobuild/config.yaml`. The harness never holds a
 project's engineering context.
+
+## Manual completion evidence
+
+`scripts/manual/complete.py` is linked through the existing manifest and invoked
+by both owned adapter fragments before a manual final summary. It captures Git
+state, verifies validation fingerprints, requires semantic reconciliation records
+and returns PASS/NEEDS_ATTENTION plus the Git-policy recommendation flag. The
+validation runner/command schema and extracted `secret_files.py` are reused;
+Autobuild controller state and checkpoint behavior remain unchanged. Task-local
+artifacts live outside the repository. ADR 0003 records the invocation boundary
+and its instructional limitation. See `scripts/manual/README.md`.

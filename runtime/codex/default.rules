@@ -1,0 +1,10 @@
+# BEGIN AI Engineering Harness
+# GIT.md: manual commits require human approval. Options can precede commit.
+prefix_rule(pattern=[["git", "/usr/bin/git", "/bin/git"], "commit"], decision="prompt")
+prefix_rule(pattern=[["git", "/usr/bin/git", "/bin/git"], "-C"], decision="prompt")
+prefix_rule(pattern=[["git", "/usr/bin/git", "/bin/git"], "-c"], decision="prompt")
+prefix_rule(pattern=[["git", "/usr/bin/git", "/bin/git"], "--git-dir"], decision="prompt")
+prefix_rule(pattern=[["git", "/usr/bin/git", "/bin/git"], "--work-tree"], decision="prompt")
+prefix_rule(pattern=[["git", "/usr/bin/git", "/bin/git"], "--config-env"], decision="prompt")
+prefix_rule(pattern=[["git", "/usr/bin/git", "/bin/git"], "--exec-path"], decision="prompt")
+# END AI Engineering Harness

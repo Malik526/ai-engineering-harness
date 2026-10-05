@@ -7,7 +7,6 @@ Provider-neutral: the implementer is whatever adapter the project config
 assigns. Worktrees are always preserved, on success and on failure.
 """
 
-import fnmatch
 import os
 import shutil
 import sys
@@ -33,9 +32,7 @@ from autobuild.schemas import load_schema, schema_errors
 from autobuild.states import RunState
 from autobuild.validation_runner import ValidationOutcome, run_validation, substitute
 
-# Files that must never leave the worktree in a diff or commit.
-SECRET_PATTERNS = (".env", ".env.*", "*.pem", "*.key", "id_rsa*", "id_ed25519*", "credentials*.json",
-                   "*service-account*.json", "auth.json")
+from autobuild.secret_files import SECRET_PATTERNS, secret_like
 
 
 class RunAborted(Exception):
@@ -47,10 +44,6 @@ class RunOutcome:
     state: dict[str, Any]
     run_dir: Path
     report: str
-
-
-def secret_like(paths: list[str]) -> list[str]:
-    return [p for p in paths if any(fnmatch.fnmatch(Path(p).name, pattern) for pattern in SECRET_PATTERNS)]
 
 
 class Runner:

@@ -20,3 +20,6 @@ autobuild                                  ~/.agents/autobuild
 skills/custom/implementation-planning      ~/.agents/skills/implementation-planning
 skills/custom/implementation-planning      ~/.codex/skills/implementation-planning
 skills/custom/implementation-planning      ~/.claude/skills/implementation-planning
+
+# Shared manual completion check and usage, outside Autobuild orchestration.
+scripts/manual                            ~/.agents/manual-completion

@@ -34,13 +34,23 @@ policies/global/      global policies, linked to ~/.agents/<NAME>.md
 skills/custom/        custom skills (implementation-planning)
 autobuild/            autobuild framework, linked to ~/.agents/autobuild
 scripts/setup/        links.manifest + install.py (check / apply / adopt links),
+                      runtime_guards.py (merge owned runtime fragments),
                       audit_instructions.py (verify the policy → adapter chain and commit guards)
-scripts/hooks/        git_commit_guard.py (Claude Code: every git commit asks the human)
+runtime/              provider guard definitions and policy-reference adapter fragments
+scripts/hooks/        git_commit_guard.py (Claude Code: recognized commits ask the human)
 scripts/tests/        tests for the harness scripts
+scripts/evaluations/  opt-in manual runtime fixtures and measured completion behavior
 docs/                 ARCHITECTURE, INSTALLATION, SKILL_MANAGEMENT,
-                      POLICY_ENFORCEMENT_MATRIX, evaluations and ADRs
+                      RUNTIME_GUARDS, POLICY_ENFORCEMENT_MATRIX, evaluations and ADRs
 CHANGELOG.md
 ```
 
 Start with `docs/ARCHITECTURE.md`. To install on a machine, see
 `docs/INSTALLATION.md`.
+
+## Manual completion
+
+Both runtime adapters invoke the shared lightweight [manual completion check](scripts/manual/README.md)
+before the final summary. It verifies Git state, fresh validation evidence,
+documentation reconciliation records and existing secret-like filename checks.
+It never commits or creates branches/worktrees and skips Autobuild runs.

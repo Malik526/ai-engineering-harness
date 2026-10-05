@@ -50,3 +50,20 @@ Verification commands run:
 - `/home/malik/ai-engineering-harness/autobuild/.venv/bin/python -m pytest scripts/tests` -> 18 passed.
 - `python3 scripts/setup/audit_instructions.py` -> passed.
 - `/home/malik/ai-engineering-harness/autobuild/.venv/bin/python -m pytest` from `autobuild/` -> 174 passed.
+
+## 2026-10-04 - Runtime Portability Follow-Up
+
+The local-only guard configuration above is superseded by versioned `runtime/`
+definitions and installer/audit reconciliation. See
+[Runtime Guard Evaluation](RUNTIME_GUARD_EVALUATION.md) for fresh-home cases,
+measured Codex completion results, Claude validation, and remaining bypasses.
+The original evidence remains historical; the current mechanism is described in
+`RUNTIME_GUARDS.md` and the updated enforcement matrix.
+
+## 2026-10-04 - Manual Completion Follow-Up
+
+The previously recommended manual completion backing is now implemented as a
+shared evidence check and adapter instruction. See
+[Manual Completion Evaluation](MANUAL_COMPLETION_EVALUATION.md) for fixture
+coverage, regression results and invocation/semantic limitations. The historical
+results above remain unchanged; ADR 0003 records the current architecture.

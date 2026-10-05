@@ -3,9 +3,10 @@
 
 Reads scripts/setup/links.manifest and, for each <source> <target> pair,
 reports or establishes `target -> <repo>/<source>` as an absolute symlink.
+Also reconciles the owned runtime fragments for installed provider executables.
 
     install.py            check only (default); exit 1 unless every link is OK
-    install.py --apply    create missing links
+    install.py --apply    create missing links and reconcile runtime fragments
     install.py --adopt    also replace targets whose content is identical to the
                           source, after moving the original into a backup dir
 
@@ -22,12 +23,13 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+from runtime_guards import installed_providers, reconcile, runtime_directory
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = REPO_ROOT / "scripts" / "setup" / "links.manifest"
-BACKUP_ROOT = Path.home() / ".agents" / ".harness-backup"
 
 
-def read_manifest() -> list[tuple[Path, Path]]:
+def read_manifest(home: Path | None = None, providers: list[str] | None = None) -> list[tuple[Path, Path]]:
     """Return (absolute source, absolute target) pairs from the manifest."""
     pairs = []
     for number, raw in enumerate(MANIFEST.read_text().splitlines(), start=1):
@@ -37,7 +39,13 @@ def read_manifest() -> list[tuple[Path, Path]]:
         parts = line.split()
         if len(parts) != 2:
             raise SystemExit(f"{MANIFEST}:{number}: expected '<source> <target>', got {raw!r}")
-        pairs.append((REPO_ROOT / parts[0], Path(os.path.expanduser(parts[1]))))
+        target = (home or Path.home()) / parts[1].removeprefix("~/")
+        runtime = next((name for name in ("claude", "codex") if parts[1].startswith(f"~/.{name}/")), None)
+        if providers is not None and runtime and runtime not in providers:
+            continue
+        if runtime:
+            target = runtime_directory(home or Path.home(), runtime) / parts[1].split("/", 2)[2]
+        pairs.append((REPO_ROOT / parts[0], target))
     return pairs
 
 
@@ -65,24 +73,23 @@ def status(source: Path, target: Path) -> str:
     return "ADOPTABLE" if same_content(source, target) else "CONFLICT"
 
 
-def backup(target: Path, stamp: str) -> Path:
-    """Move `target` under BACKUP_ROOT/<stamp>/, keeping its path relative to $HOME."""
-    destination = BACKUP_ROOT / stamp / target.relative_to(Path.home())
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    shutil.move(str(target), str(destination))
-    return destination
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--apply", action="store_true", help="create missing links")
     parser.add_argument("--adopt", action="store_true", help="also replace identical copies (implies --apply)")
+    parser.add_argument("--home", type=Path, default=Path.home(), help="target home (isolated setup testing)")
+    parser.add_argument("--check", action="store_true", help="explicit read-only check (the default)")
     args = parser.parse_args()
+    args.home = args.home.expanduser().resolve()
+    if args.check and (args.apply or args.adopt):
+        parser.error("--check cannot be combined with --apply or --adopt")
+    backup_root = args.home / ".agents" / ".harness-backup"
     apply = args.apply or args.adopt
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     problems = 0
 
-    for source, target in read_manifest():
+    providers = installed_providers()
+    for source, target in read_manifest(args.home, providers):
         state = status(source, target)
         note = ""
         if apply and state == "MISSING":
@@ -90,7 +97,10 @@ def main() -> int:
             target.symlink_to(source)
             state, note = "LINKED", ""
         elif args.adopt and state == "ADOPTABLE":
-            saved = backup(target, stamp)
+            relative = target.relative_to(args.home) if target.is_relative_to(args.home) else Path("external") / target.name
+            saved = backup_root / stamp / relative
+            saved.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(target), str(saved))
             target.symlink_to(source)
             state, note = "ADOPTED", f"original saved to {saved}"
         elif state == "CONFLICT":
@@ -99,6 +109,11 @@ def main() -> int:
         if state not in ("OK", "LINKED", "ADOPTED"):
             problems += 1
         print(f"{state:<9} {target} -> {source.relative_to(REPO_ROOT)} {note}".rstrip())
+
+    for report in reconcile(REPO_ROOT, args.home, providers, apply=apply):
+        print(report)
+        if report.startswith(("MISSING", "CONFLICT", "STALE")):
+            problems += 1
 
     return 1 if problems else 0
 
