@@ -54,6 +54,26 @@ Implementation status:
 
 ## Vendor Capability Reuse
 
+### Autobuild 0.5 Validation Controls (2026-10-04)
+
+Every deterministic validation result that can authorize a checkpoint now runs
+through a controller-owned Linux Bubblewrap path. Normal validation materializes
+the exact Git snapshot in disposable writable storage, uses filtered explicit
+environment and default-denied network policy, and cannot access the real worktree,
+Git metadata, user home, or unrelated host paths. Its root is read-only apart from
+declared scratch paths. Host execution needs an explicit manual-only flag, so a
+missing snapshot raises instead of running unsandboxed (2026-10-05 takeover hardening). Browser gates reuse the shared
+sandbox policy/lifecycle without weakening their 0.4 read-only behavior.
+
+PASS/FAIL/ERROR/SKIPPED derive from controller-observed process behavior; missing
+tools/sandbox, setup failures and timeouts are ERROR with no host fallback. Per-
+attempt evidence binds source/config/argv/policy/timing/status and hashed logs;
+history integrity is checked before review, resume, and checkpoint. Required
+non-PASS blocks checkpoint independently of reviewer PASS. This remains scoped
+Linux process/filesystem/network confinement, not hostile multi-tenant isolation:
+trusted runtime binaries, kernel safety, content scanning and CPU/memory quotas are
+outside 0.5. See ADR 0005, `VALIDATION_CONFINEMENT.md`, and `EVALUATION_0_5.md`.
+
 ### Autobuild 0.4 Browser Controls (2026-10-04)
 
 Explicit config and schemas select browser gates. Controller subprocess exit,
@@ -67,9 +87,10 @@ Mandatory Bubblewrap user/network/PID namespaces, read-only worktree, private
 home/temp/runtime sockets, explicit environment and process-group cleanup confine
 browser execution. Missing sandbox capability fails closed. Artifacts are only
 copied from fresh approved output roots with link/path/filename/budget checks.
-Existing normal validation remains unsandboxed; secret content scanning and
-resource quotas remain gaps. These controls do not constitute hostile-workload
-isolation. See `autobuild/docs/BROWSER_GATES.md`, ADR 0004 and `EVALUATION_0_4.md`.
+At that milestone normal validation remained unsandboxed; 0.5 supersedes that
+gap. Secret content scanning and resource quotas remain gaps. These controls do
+not constitute hostile-workload isolation. See `autobuild/docs/BROWSER_GATES.md`,
+ADR 0004 and `EVALUATION_0_4.md`.
 
 ### Autobuild 0.3 Controls (2026-10-04)
 

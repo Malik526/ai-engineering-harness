@@ -168,6 +168,10 @@ def preflight(brief_path: Path, project_root: Path, *, base_branch: Optional[str
         reason = command_unavailable(spec, project_root)
         if reason:
             issues.append(reason)
+    for relative in config.data["validation"].get("runtime_paths", []):
+        runtime_path = project_root / relative
+        if runtime_path.is_symlink() or not runtime_path.exists() or not is_within(runtime_path, project_root):
+            issues.append(f"validation.runtime_paths: {relative} is missing, linked or outside the project")
     if meta["validation"]["tests_required"] and not any(c["kind"] == "test" for c in commands):
         issues.append("validation: the brief requires tests but the project config defines no `test` command")
     browser_gate = bool(meta["validation"]["browser_required"])

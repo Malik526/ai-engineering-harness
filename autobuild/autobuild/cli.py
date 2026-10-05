@@ -251,25 +251,34 @@ def _show_gate(path: Path, done: str) -> bool:
 
 
 def _show_evidence(run: Path, attempt: Optional[int]) -> bool:
-    from autobuild.browser_contract import evidence_errors
+    from autobuild.browser_contract import evidence_errors as browser_evidence_errors
+    from autobuild.validation_contract import evidence_errors as validation_evidence_errors
     try:
         state = json.loads((run / "state.json").read_text())
-        records = state.get("browser_history", [])
-        if attempt is not None:
-            records = [record for record in records if record["attempt"] == attempt]
-        if not records:
-            return _report(str(run), ["no controller browser evidence for the selected attempt"])
-        ok = True
-        for record in records:
-            errors = evidence_errors(run, record["artifact"], record["sha256"])
-            ok &= _report(str(run / record["artifact"]), errors)
-            if not errors:
+        histories = (("validation", state.get("validation_history", []), validation_evidence_errors),
+                     ("browser", state.get("browser_history", []), browser_evidence_errors))
+        ok, found = True, False
+        for kind, records, verifier in histories:
+            if attempt is not None:
+                records = [record for record in records if record["attempt"] == attempt]
+            for record in records:
+                found = True
+                errors = verifier(run, record["artifact"], record["sha256"])
+                ok &= _report(str(run / record["artifact"]), errors)
+                if errors:
+                    continue
                 document = json.loads((run / record["artifact"]).read_text())
-                print(f"Attempt {document['attempt']}; review cycle {document['review_cycle']}; "
+                print(f"{kind.title()} attempt {document['attempt']}; review cycle {document['review_cycle']}; "
                       f"snapshot {document['snapshot_tree']}")
-                for gate in document["gates"]:
-                    print(f"  {gate['id']}: {gate['status']} ({'required' if gate['required'] else 'optional'}); "
-                          f"exit={gate['exit_code']}; artifacts={len(gate['artifacts'])}; {gate['detail']}")
+                entries = document["commands"] if kind == "validation" else document["gates"]
+                for entry in entries:
+                    identity = entry["name"] if kind == "validation" else entry["id"]
+                    suffix = (f"network={entry['network']}; {entry['detail']}" if kind == "validation" else
+                              f"artifacts={len(entry['artifacts'])}; {entry['detail']}")
+                    print(f"  {identity}: {entry['status']} ({'required' if entry['required'] else 'optional'}); "
+                          f"exit={entry['exit_code']}; {suffix}")
+        if not found:
+            return _report(str(run), ["no controller validation or browser evidence for the selected attempt"])
         return ok
     except (OSError, ValueError, KeyError, TypeError) as exc:
         return _report(str(run), [str(exc)])
@@ -303,7 +312,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("run", type=Path)
     p.add_argument("--project", type=Path)
     p.add_argument("--dry-run", action="store_true")
-    p = sub.add_parser("evidence", help="inspect and verify controller browser manifests")
+    p = sub.add_parser("evidence", help="inspect and verify controller validation and browser manifests")
     p.add_argument("run", type=Path, help="run directory")
     p.add_argument("--attempt", type=int)
     p = sub.add_parser("fixture")

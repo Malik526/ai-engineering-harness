@@ -26,6 +26,8 @@ def review_prompt(plan, store, cycle: int, attempt: int, session_id: str) -> str
         ", ".join(["AGENTS.md and other project-local instruction files", "README.md", "docs/ARCHITECTURE.md",
                    plan.config.data["paths"]["project_state"], plan.config.data["paths"]["adr_directory"]]),
         "Validation stdout/stderr paths are relative to " + str(plan.run_dir) + ". Read critical results as needed.",
+        "Required deterministic validation is a hard checkpoint gate. Use REVISE for a fixable FAIL and BLOCK for "
+        "ERROR, unavailable confinement/tooling, malformed setup, or unverifiable evidence. Never override non-PASS evidence.",
         "Return exactly one structured review: PASS, REVISE, or BLOCK. Legacy BLOCKED is accepted as BLOCK.",
         "REVISE findings must identify requirement, severity, evidence, affected files/locations and required correction.",
         "Use BLOCK for human prerequisites, conflicting requirements, unsafe actions or unverifiable critical requirements.",

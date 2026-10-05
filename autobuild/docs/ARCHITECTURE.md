@@ -16,7 +16,7 @@ notifications.
 | --- | --- | --- | --- |
 | Human | — | Architecture and product authority; approves plans; merges to protected branches; secrets; external accounts; production | — |
 | Planner | configured provider | Interactive planning conversation, challenging assumptions, roadmap, approved briefs, autonomy classification | Starts implementation before explicit approval |
-| Controller | Autobuild (deterministic code) | State machine, autonomy gate, worktree/branch isolation, stop handling, notifications | Asks a model whether to continue |
+| Controller | Autobuild (deterministic code) | State machine, autonomy gate, worktree/branch isolation, confined validation, stop handling, notifications | Asks a model whether to continue |
 | Implementer | configured provider | Implements one approved brief inside its worktree, runs validation, updates docs, writes a summary | Approves its own work |
 | Reviewer | configured provider, always a fresh session | Judges the brief against the actual diff and evidence; returns PASS / REVISE / BLOCK | Edits code or treats implementer narrative as evidence |
 
@@ -43,7 +43,7 @@ Human ⇄ Planner ──(explicit approval)──▶ approved brief (status: rea
                             Implementer ◀──────────────┐
                                  │                     │ findings
                                  ▼                     │
-                    Validation + browser gates         │
+              Confined validation + browser gates     │
                                  │                     │
                                  ▼                     │
                      Fresh Reviewer ── REVISE ─────────┘
@@ -82,7 +82,7 @@ Transitions:
 - Forward: `IDLE → PLANNING → READY → IMPLEMENTING → VALIDATING → REVIEWING → PASSED → COMPLETED`.
 - Implementation-only runs (phase 0.2, `review_mode: none`): `READY → IMPLEMENTING → VALIDATING → COMPLETED`. The schema forbids such a run from entering review states or claiming a review; it completes *unreviewed* and waits for the human.
 - Setup failures before implementation: `READY → FAILED`.
-- Implemented revision loop: `REVIEWING → REVISING → VALIDATING → REVIEWING` for findings. Required validation failure ends FAILED; it does not automatically repair. Every correction is revalidated before a fresh review.
+- Implemented revision loop: `REVIEWING → REVISING → VALIDATING → REVIEWING` for findings. Normal/browser failures reach review so fixable failures can produce REVISE, but required non-PASS evidence can never checkpoint and reviewer PASS cannot override it. Every correction receives fresh evidence before a fresh review.
 - Exceeding `limits.max_review_cycles` moves the run to `HUMAN_BLOCKED`, never into another loop.
 - `STOP_REQUESTED` can be entered from any working or waiting state, and leads only to `STOPPED`.
 - Human-only resume: `HUMAN_BLOCKED`, `FAILED` and `STOPPED` → `READY`. The controller never resumes on its own.
@@ -109,11 +109,21 @@ Autobuild points at them through `paths` and doesn't copy them.
 | 0.2 | **Done.** Single-implementation runner (`autobuild run`): preflight, worktree/branch isolation, Claude Code and Codex adapters, command guard, controller validation, checkpoint commit. See `RUNNER.md` |
 | 0.3 | **Implemented.** Independent review, bounded revisions, read-only reviewers, per-cycle evidence and explicit CLI resume. See `RUNNER.md` and `EVALUATION_0_3.md` for verification and live-provider limitations |
 | 0.4 | **Implemented.** Controller-owned browser/E2E gates, isolated services, immutable evidence and hard checkpoint barriers. See `BROWSER_GATES.md`, ADR 0004 and `EVALUATION_0_4.md` |
-| 0.5 | Recommended next: extend fail-closed process confinement to normal validation before roadmap rollover |
-| 0.6 | Operations: notification providers, remote stop/control provider, spend limits (local CLI resume/history already in 0.3) |
+| 0.5 | **Implemented.** Normal tests/lint/type checks/builds use the shared fail-closed Bubblewrap layer, exact disposable source snapshots, isolated environment/network policy, and immutable evidence. See `VALIDATION_CONFINEMENT.md`, ADR 0005 and `EVALUATION_0_5.md` |
+| 0.6 | Recommended next: add bounded autonomous rollover now that every deterministic checkpoint gate is controller-confined; retain human approval, stop, spend and branch boundaries |
 
 Related: `RUNNER.md`, `PROVIDERS.md`, `AUTONOMY_POLICY.md`, `ARTIFACT_CONTRACT.md`, `SAFETY_MODEL.md`,
 `CONTROL_CONTRACT.md`, `NOTIFICATION_CONTRACT.md`, `decisions/`.
+
+## Shared Validation Confinement
+
+Any deterministic result capable of permitting a checkpoint executes through
+`sandbox.py`. Normal validation uses a minimal Bubblewrap root and a disposable
+materialization of the exact synthetic Git tree; browser gates retain 0.4's
+read-only host/runtime policy but use the same policy builder and lifecycle helper.
+Both paths fail ERROR when isolation cannot be established and have no host fallback.
+See `VALIDATION_CONFINEMENT.md` for filesystem, environment, network, evidence,
+and compatibility details.
 
 ## Browser Ownership
 

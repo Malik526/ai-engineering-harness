@@ -62,14 +62,14 @@ def test_missing_command(tmp_path, local_worker):
 
 
 def test_missing_sandbox_fails_closed(tmp_path, monkeypatch):
-    monkeypatch.setattr("autobuild.browser_sandbox.shutil.which", lambda _: None)
+    monkeypatch.setattr("autobuild.sandbox.shutil.which", lambda _: None)
     document, _ = execute(tmp_path, gate())
     assert document["gates"][0]["status"] == "ERROR"
-    assert "require bubblewrap" in document["gates"][0]["detail"]
+    assert "requires bubblewrap" in document["gates"][0]["detail"]
 
 
 def test_unsupported_platform_is_gate_error(tmp_path, monkeypatch):
-    monkeypatch.setattr("autobuild.browser_sandbox.sys.platform", "win32")
+    monkeypatch.setattr("autobuild.sandbox.sys.platform", "win32")
     document, _ = execute(tmp_path, gate())
     assert document["gates"][0]["status"] == "ERROR"
     assert "Linux Bubblewrap" in document["gates"][0]["detail"]
@@ -354,7 +354,7 @@ Path(os.environ['AUTOBUILD_BROWSER_OUTPUT'], 'proof.txt').write_text('confined')
 
 
 def test_worker_cannot_be_shadowed_by_project(tmp_path, monkeypatch):
-    monkeypatch.setattr("autobuild.browser_sandbox.shutil.which", lambda name: "/usr/bin/bwrap" if name == "bwrap" else None)
+    monkeypatch.setattr("autobuild.sandbox.shutil.which", lambda name: "/usr/bin/bwrap" if name == "bwrap" else None)
     command = sandbox_command(tmp_path, tmp_path / "inputs", tmp_path / "outputs", {})
     worker = Path(browser_runner.__file__).with_name("browser_worker.py")
     assert command[-4:] == [sys.executable, "-I", str(worker), str(tmp_path / "inputs/request.json")]

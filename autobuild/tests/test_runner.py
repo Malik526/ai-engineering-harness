@@ -86,10 +86,11 @@ def test_provider_failure_marks_failed_and_preserves_worktree(tmp_path, monkeypa
 def test_validation_success_and_failure(tmp_path, monkeypatch, fake_registry):
     commands = [{"name": "always-fails", "kind": "test", "run": "echo nope >&2; exit 1"}]
     _, outcome, _ = _run(tmp_path, monkeypatch, commands=commands)
-    assert _states(outcome) == ["READY", "IMPLEMENTING", "VALIDATING", "FAILED"]
-    assert outcome.state["failure"]["reason"] == "validation_failed" and outcome.state["last_commit"] is None
+    assert _states(outcome) == ["READY", "IMPLEMENTING", "VALIDATING", "REVIEWING", "HUMAN_BLOCKED"]
+    assert "reviewer cannot override" in outcome.state["human_gate"]["reason"]
+    assert outcome.state["last_commit"] is None
     results = json.loads((outcome.run_dir / "validation/results.json").read_text())
-    assert results["commands"][0]["status"] == "failed" and results["commands"][0]["exit_code"] == 1
+    assert results["commands"][0]["status"] == "FAIL" and results["commands"][0]["exit_code"] == 1
     assert "nope" in (outcome.run_dir / results["commands"][0]["stderr_path"]).read_text()
     assert Path(outcome.state["worktree"], "feature.txt").exists()
 
@@ -103,7 +104,7 @@ def test_optional_and_path_filtered_commands(tmp_path, monkeypatch, fake_registr
     ]
     _, outcome, _ = _run(tmp_path, monkeypatch, commands=commands)
     statuses = {c["name"]: c["status"] for c in json.loads((outcome.run_dir / "validation/results.json").read_text())["commands"]}
-    assert statuses == {"feature-exists": "passed", "lint-optional": "failed", "web-only": "skipped", "uses-vars": "passed"}
+    assert statuses == {"feature-exists": "PASS", "lint-optional": "FAIL", "web-only": "SKIPPED", "uses-vars": "PASS"}
     assert outcome.state["state"] == "COMPLETED"
 
 
@@ -218,14 +219,14 @@ def test_preflight_refuses_dirty_tree_bad_base_and_missing_test_command(tmp_path
     assert git(root, "branch", "--format=%(refname:short)").split() == ["feature/other", "main"]
 
 
-def test_preflight_refuses_non_green_and_unavailable_command(tmp_path, fake_registry):
+def test_preflight_refuses_non_green_before_runtime_tool_resolution(tmp_path, fake_registry):
     root, brief = make_project(tmp_path, commands=[{"name": "t", "kind": "test", "run": "no-such-tool-xyz --run"}])
     brief.write_text(brief.read_text().replace("status: ready", "status: draft"))
     git(root, "commit", "-qam", "draft")
     with pytest.raises(PreflightError) as exc:
         preflight(brief, root)
     joined = "\n".join(exc.value.issues)
-    assert "status is draft" in joined and "'no-such-tool-xyz' not found" in joined
+    assert "status is draft" in joined
     _assert_untouched(root)
 
 

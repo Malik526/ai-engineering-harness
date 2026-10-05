@@ -44,7 +44,7 @@ Create feature.txt.
 feature.txt exists.
 """
 
-DEFAULT_COMMANDS = [{"name": "feature-exists", "kind": "test", "run": "test -f feature.txt"}]
+DEFAULT_COMMANDS = [{"name": "feature-exists", "kind": "test", "command": ["test", "-f", "feature.txt"]}]
 
 
 def git(cwd: Path, *args: str) -> str:

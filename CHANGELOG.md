@@ -1,6 +1,55 @@
 # AI Engineering Harness — Changelog
 
+## 2026-10-05
+
+### Autobuild 0.5 - Takeover Verification and Confinement Hardening
+
+- Claude Code took over the uncommitted 0.5 worktree after Codex hit its usage
+  limit. It re-verified the suite, all live evidence manifests, fixture refs and
+  process cleanup.
+- Validation now refuses to run without a controller source snapshot. Host
+  execution is an explicit `manual_host` mode used only by manual completion,
+  so an omitted argument can no longer run checkpoint-capable validation
+  unsandboxed.
+- The minimal normal-validation root is remounted read-only after setup, with
+  a private `/tmp` tmpfs. Writes outside the snapshot copy and scratch paths now
+  fail rather than landing in an ephemeral layer. Browser policy is unchanged.
+- Added native tests for credential directories and harness metadata
+  invisibility, no host fallback, malformed runtime network policy, a detached
+  child after timeout, and the read-only root. Combined suite: 389 passed
+  (supersedes the 384 below).
+- A live controller-level adversarial run (Claude implementer, explicit while
+  Codex was quota-blocked) passed every host read/write, ref, network, secret,
+  child-process and writable-scratch probe. It found the writable-root issue
+  fixed above.
+- Newly documented limitation: Claude Code 2.1.289 rejects the review schema's
+  top-level `allOf`, so Claude cannot act as reviewer (`PROVIDERS.md`).
+
 ## 2026-10-04
+
+### Autobuild 0.5 - Fail-Closed Normal Validation
+
+- Moved checkpoint-capable tests, lint, type checks, builds, setup, and project
+  checks behind the controller-owned Bubblewrap layer shared with browser gates.
+  Validation now runs against the exact synthetic Git tree in a disposable
+  writable workspace, never the source worktree, with isolated scratch/cache/home.
+- Added preferred argv commands, explicit cwd/timeout/required/environment/network
+  policy, default-denied networking, filtered environments, and fail-closed
+  PASS/FAIL/ERROR/SKIPPED outcomes. Legacy `run` strings remain sandboxed.
+- Added immutable per-attempt normal-validation evidence and state history bound
+  to run/review/source/config identity, raw-log hashes, bounded summaries, and
+  resume/checkpoint integrity checks. Reviewer PASS cannot override required
+  non-PASS evidence; revisions rerun both normal and browser validation.
+- Extracted shared sandbox and process-lifecycle primitives without weakening
+  0.4 browser behavior. Added native adversarial coverage for host/worktree/ref
+  access, network and environment isolation, writable build paths, missing
+  tools/sandbox, timeout, detached children, tampering, resume and interruption.
+- Updated architecture, runner, safety, artifacts, enforcement, ADR 0005, and
+  `autobuild/docs/EVALUATION_0_5.md`. No rollover, merge, push, or harness commit.
+- Validation: 384 combined tests pass (16 more than 0.4), plus core schema/example,
+  instruction-audit, compile and diff checks. Live Codex/Codex positive and
+  Claude/Codex normal-FAIL -> REVISE -> fresh PASS/browser PASS runs completed;
+  native escape/network/secret/child fixtures passed, with no provider fallback.
 
 ### Autobuild 0.4 - Controller-Owned Browser Gates
 

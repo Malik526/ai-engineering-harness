@@ -11,7 +11,7 @@ import time
 
 from autobuild.browser_artifacts import collect, file_record
 from autobuild.browser_sandbox import isolated_environment, sandbox_command
-from autobuild.browser_worker import terminate
+from autobuild.process_lifecycle import terminate_process_group
 from autobuild.command_guard import is_within
 from autobuild.run_store import utc_now
 from autobuild.schemas import schema_errors
@@ -25,7 +25,8 @@ def approved_cwd(worktree: Path, relative: str) -> Path:
 
 
 def run_browser(*, run_id, attempt, review_cycle, worktree, head_commit, snapshot_tree,
-                brief_sha256, config, run_dir, browser_required=False):
+                brief_sha256, config, run_dir, browser_required=False, execution_root=None):
+    execution_root = Path(execution_root or worktree)
     gates = list(config["validation"].get("browser_gates", []))
     if not gates and not browser_required:
         return None
@@ -44,8 +45,8 @@ def run_browser(*, run_id, attempt, review_cycle, worktree, head_commit, snapsho
         if gate["id"] == "missing-browser-coverage":
             detail = "brief requires browser evidence but no enabled required gate is configured"
         environment = {}
-        cwd = str(worktree / gate.get("cwd", "."))
-        service_cwd = str(worktree / gate.get("service", {}).get("cwd", gate.get("cwd", ".")))
+        cwd = str(execution_root / gate.get("cwd", "."))
+        service_cwd = str(execution_root / gate.get("service", {}).get("cwd", gate.get("cwd", ".")))
         with tempfile.TemporaryDirectory(prefix="autobuild-browser-") as temporary:
             inputs = Path(temporary)
             writable = inputs / "work"
@@ -56,11 +57,11 @@ def run_browser(*, run_id, attempt, review_cycle, worktree, head_commit, snapsho
             if gate.get("enabled", True):
                 process = None
                 try:
-                    cwd = str(approved_cwd(worktree, gate.get("cwd", ".")))
-                    service_cwd = str(approved_cwd(worktree, gate.get("service", {}).get("cwd", gate.get("cwd", "."))))
+                    cwd = str(approved_cwd(execution_root, gate.get("cwd", ".")))
+                    service_cwd = str(approved_cwd(execution_root, gate.get("service", {}).get("cwd", gate.get("cwd", "."))))
                     request = {"root": str(writable), "gate": gate, "cwd": cwd, "service_cwd": service_cwd}
                     (inputs / "request.json").write_text(json.dumps(request))
-                    command = sandbox_command(worktree, inputs, writable, environment)
+                    command = sandbox_command(execution_root, inputs, writable, environment)
                     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                                start_new_session=True, env={"PATH": "/usr/bin:/bin"})
                     raw, errors = process.communicate(timeout=gate.get("timeout_seconds", 180)
@@ -77,7 +78,7 @@ def run_browser(*, run_id, attempt, review_cycle, worktree, head_commit, snapsho
                 except (OSError, ValueError, KeyError, TypeError, RuntimeError, subprocess.TimeoutExpired) as exc:
                     status, detail = "ERROR", f"{type(exc).__name__}: {exc}"
                 finally:
-                    terminate(process)
+                    terminate_process_group(process)
             for name in ("stdout.txt", "stderr.txt", "service.stdout.txt", "service.stderr.txt"):
                 source = writable / name
                 target = directory / name

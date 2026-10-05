@@ -14,7 +14,6 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'autobuild'))
 from autobuild.secret_files import secret_like
-from autobuild.validation_runner import run_validation
 
 AREAS = ('changelog', 'project_state', 'evaluation_results', 'known_limitations',
          'architectural_decisions', 'implementation_documentation')
@@ -97,9 +96,10 @@ def evaluate(root, evidence, reconciliation, commands, run=False):
             if not (names and all(name in required for name in names)) and not scope.get('not_applicable'):
                 issues.append('reconcile validation applicability: ' + kind)
     if run and commands and not unsafe:
+        from autobuild.validation_runner import run_validation
         before = state['fingerprint']
         outcome = run_validation(run_id='manual', commands=commands, project_root=root,
-                                 worktree=root, changed_files=paths, run_dir=evidence.parent)
+                                 worktree=root, changed_files=paths, run_dir=evidence.parent, manual_host=True)
         outcome.document['producer'] = 'manual'
         record = {'root': str(root), 'fingerprint': before, 'commands_config': commands,
                   'validation': outcome.document}
@@ -112,7 +112,7 @@ def evaluate(root, evidence, reconciliation, commands, run=False):
             issues.append('required validation missing or stale')
         else:
             for result in record['validation']['commands']:
-                if result['required'] and result['status'] not in ('passed', 'skipped'):
+                if result['required'] and result['status'] not in ('PASS', 'SKIPPED'):
                     issues.append('required validation did not pass: ' + result['name'])
     expected = reconciliation.get('expected_paths', [])
     unexpected = sorted(set(paths) - set(expected))

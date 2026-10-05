@@ -88,7 +88,33 @@ Budgets count all review invocations. Only PASS reaches checkpoint eligibility;
 BLOCK/limits stop HUMAN_BLOCKED. Explicit resume checks frozen config/brief,
 worktree repository/branch/HEAD, refs and preserved evidence before execution,
 and an exclusive run lock prevents concurrent controllers. Resume never reuses
-browser evidence or automatically clears a human gate. See ADRs 0003 and 0004.
+old normal/browser evidence for changed source or automatically clears a human
+gate. See ADRs 0003 through 0005.
+
+## Normal Validation Execution (0.5)
+
+Normal tests, lint, type checks, builds, setup, and project checks run through the
+same fail-closed Bubblewrap policy builder as browser gates. The controller first
+materializes the exact synthetic Git tree into a fresh temporary directory. That
+copy is writable, so normal build/test output works, but the real worktree and its
+Git metadata are absent. Private writable HOME, TMPDIR, XDG cache/config/state and
+`AUTOBUILD_VALIDATION_SCRATCH` paths are destroyed after normal and browser gates.
+
+The minimal root contains the active Python/tool runtime, system executables and
+libraries, the read-only worker/request, explicitly configured read-only runtime
+paths, and the writable disposable locations. User home, SSH files, unrelated
+repositories, parent directories and host runtime sockets are not mounted, and
+the root is remounted read-only so writes outside the approved paths fail. The
+environment is rebuilt from safe essentials plus explicitly configured keys;
+loader/path/proxy/controller keys are reserved. Network is a fresh namespace by
+default. `network: host` is an explicit per-command opt-in recorded in evidence.
+
+Missing Bubblewrap, namespace/mount setup, missing executable, invalid runtime
+cwd/output, and timeout become ERROR. Nonzero command exit becomes FAIL. Neither
+case can trigger host execution. Worker and controller watchdogs terminate process
+groups; PID namespace teardown kills detached descendants on every outcome.
+Required non-PASS evidence blocks checkpoint even if a reviewer returns PASS.
+Historical evidence is hash/source/config bound and cannot authorize changed code.
 
 ## Browser Execution (0.4)
 
@@ -107,8 +133,8 @@ symlink/root-link/hard-link/special-file/traversal/secret-filename rejection,
 file-count/byte budgets and no-follow file opens. Raw logs are bounded and reject
 links. Required non-PASS browser evidence independently blocks checkpoint.
 
-This does not sandbox existing normal validation or change provider security.
-Read-only system/controller assets remain visible; worktree/node_modules content
+This does not change provider security. Read-only system/controller assets remain
+visible to browser gates; worktree/node_modules content
 may already contain sensitive material. Filename checks are not content scanning.
 Browser commands must remain trusted project tests, not hostile multi-tenant
 workloads; namespaces do not provide resource quotas, syscall filtering or

@@ -94,6 +94,15 @@ restriction documented in [OpenAI Structured Outputs](https://developers.openai.
 Claude retains the full schema. Raw process logs and actual IDs are kept per
 attempt/cycle. Both adapters reject reviewer resume requests.
 
+Known limitation (found 2026-10-05, Claude Code 2.1.289): Claude **cannot
+currently serve as reviewer**. The review contract's top-level `allOf`
+conditionals are rejected by the API (`input_schema does not support oneOf,
+allOf, or anyOf at the top level`), so every Claude review fails
+`reviewer_failed` before judging anything. The implementer role is unaffected,
+since its report schema has no top-level conditionals. Configure Codex as
+reviewer until the Claude adapter projects the schema the way the Codex adapter
+does. See `EVALUATION_0_5.md`.
+
 The controller loads the adapter named in the registry (`adapter:
 module:Class`) for the role being run. A missing or unhealthy configured
 provider stops preflight with `Status: unavailable`. Autobuild never falls

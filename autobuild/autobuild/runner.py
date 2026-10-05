@@ -28,11 +28,12 @@ from autobuild.run_store import RunStore, close_logger, utc_now
 from autobuild.safety import is_protected_branch
 from autobuild.schemas import load_schema, schema_errors
 from autobuild.states import RunState
-from autobuild.validation_runner import ValidationOutcome, run_validation, substitute
+from autobuild.validation_runner import ValidationOutcome, command_argv, run_validation
 
 from autobuild.secret_files import secret_like
 from autobuild.browser_contract import digest, history_errors
 from autobuild.browser_runner import run_browser
+from autobuild.validation_contract import digest as validation_digest, history_errors as validation_history_errors
 
 
 class RunAborted(Exception):
@@ -71,6 +72,8 @@ class Runner:
         try:
             return self._run_locked()
         finally:
+            if self.validation is not None:
+                self.validation.cleanup()
             close_logger(self.store)
             lock.unlink(missing_ok=True)
 
@@ -91,7 +94,7 @@ class Runner:
                 self.store = RunStore.create(config=plan.config, run_dir=plan.run_dir, run_id=plan.run_id,
                                             implementation_id=plan.meta["id"], brief_path=plan.brief_path,
                                             review_mode="independent")
-                self.store.update(review_history=[], revision_history=[], browser_history=[], final_review_status=None)
+                self.store.update(review_history=[], revision_history=[], validation_history=[], browser_history=[], final_review_status=None)
                 self._create_worktree()
             self._implement(resume=bool(plan.resume_state))
             self._collect_evidence()
@@ -100,6 +103,9 @@ class Runner:
             while True:
                 review = self._review()
                 if review["status"] == "PASS":
+                    if self.validation is None or not self.validation.passed:
+                        self._human_block("required normal validation did not PASS; reviewer cannot override controller evidence")
+                        raise RunAborted
                     if self.browser is not None and not self.browser["passed"]:
                         self._human_block("required browser gates did not PASS; reviewer cannot override controller evidence")
                         raise RunAborted
@@ -158,12 +164,13 @@ class Runner:
         plan, store = self.plan, self.store
         self._verify_frozen_brief()
         self._verify_browser_history()
+        self._verify_validation_history()
         self._verify_protected_refs()
         if self.git.current_branch(plan.worktree) != plan.branch or self.git.read(
                 "rev-parse", "HEAD", cwd=plan.worktree).strip() != self.expected_head:
             self._abort("worktree_mismatch", "branch or HEAD changed before implementer launch", recoverable=False)
         project_docs = [plan.config.data["paths"][k] for k in ("project_state", "adr_directory", "roadmap")]
-        commands = [{**c, "run": substitute(c["run"], plan.project_root, plan.worktree)} for c in plan.validation_commands]
+        commands = [{**c, "display": command_argv(c, plan.worktree, plan.worktree)[0]} for c in plan.validation_commands]
         prompt = build_prompt(brief_text=(store.path("brief.md")).read_text(), worktree=plan.worktree,
                               branch=plan.branch, base_branch=plan.base_branch, base_commit=plan.base_commit,
                               project_docs=project_docs, validation_commands=commands)
@@ -257,19 +264,28 @@ class Runner:
         self.validation = run_validation(run_id=plan.run_id, commands=plan.validation_commands,
                                          project_root=plan.project_root, worktree=plan.worktree,
                                          changed_files=self.evidence.changed_paths, run_dir=plan.run_dir,
-                                         logs_subdirectory=f"validation/cycle-{self.attempt:02d}/logs")
+                                         logs_subdirectory=f"validation/cycle-{self.attempt:02d}/logs",
+                                         snapshot_tree=self.evidence.snapshot_tree, head_commit=self.evidence.head_commit,
+                                         attempt=self.attempt, review_cycle=store.state["review_cycle"] + 1,
+                                         brief_sha256=store.state["brief_sha256"], config=plan.config.data)
         errors = schema_errors("validation", self.validation.document)
         if errors:
             raise RuntimeError("validation results violate schema: " + "; ".join(errors))
         store.write_json("validation/results.json", self.validation.document)
         store.write_json(f"validation/cycle-{self.attempt:02d}/results.json", self.validation.document)
+        artifact = f"validation/cycle-{self.attempt:02d}/results.json"
+        history = store.state.get("validation_history", []) + [{
+            "attempt": self.attempt, "review_cycle": self.validation.document["review_cycle"], "artifact": artifact,
+            "sha256": validation_digest(store.path(artifact)), "snapshot_tree": self.evidence.snapshot_tree,
+            "passed": self.validation.passed,
+        }]
+        store.update(validation_history=history)
         self._verify_snapshot("validation")
-        if not self.validation.passed:
-            self._abort("validation_failed", "required validation failed: " + ", ".join(self.validation.failed_required))
 
     def _review(self) -> dict:
         plan, store = self.plan, self.store
         self._verify_browser_history()
+        self._verify_validation_history()
         cycle = store.state["review_cycle"] + 1
         if cycle > plan.config.data["limits"]["max_review_cycles"]:
             self._human_block("maximum review cycles reached without PASS")
@@ -308,6 +324,7 @@ class Runner:
         store.update(agent_sessions=sessions)
         self._verify_snapshot("reviewer")
         self._verify_browser_history()
+        self._verify_validation_history()
         if not result.succeeded or result.structured_output is None:
             self._abort("reviewer_failed", f"configured reviewer {assignment.provider}: exit={result.exit_code}; {result.output_error}")
         review = dict(result.structured_output)
@@ -373,6 +390,10 @@ class Runner:
         """Commit the validated snapshot when checkpoint_policy allows it; never asks anyone."""
         plan, store = self.plan, self.store
         self._verify_browser_history()
+        self._verify_validation_history()
+        if self.validation is None or not self.validation.passed:
+            self._human_block("required normal validation failed or is stale")
+            raise RunAborted
         if self.browser is None and (plan.browser_gate or plan.config.data["validation"].get("browser_gates")):
             self._human_block("controller browser evidence is missing")
             raise RunAborted
@@ -435,7 +456,8 @@ class Runner:
                                   review_cycle=store.state["review_cycle"] + 1, worktree=plan.worktree,
                                   head_commit=self.evidence.head_commit, snapshot_tree=self.evidence.snapshot_tree,
                                   brief_sha256=store.state["brief_sha256"], config=plan.config.data,
-                                  run_dir=plan.run_dir, browser_required=plan.browser_gate)
+                                  run_dir=plan.run_dir, browser_required=plan.browser_gate,
+                                  execution_root=self.validation.execution_root if self.validation else None)
         if self.browser is not None:
             artifact = f"browser/cycle-{self.attempt:02d}/results.json"
             record = {"attempt": self.attempt, "review_cycle": self.browser["review_cycle"], "artifact": artifact,
@@ -443,11 +465,18 @@ class Runner:
                       "passed": self.browser["passed"]}
             store.update(browser_history=store.state.get("browser_history", []) + [record])
             self._verify_snapshot("browser")
+        if self.validation is not None:
+            self.validation.cleanup()
 
     def _verify_browser_history(self) -> None:
         errors = history_errors(self.plan.run_dir, self.store.state)
         if errors:
             self._abort("browser_evidence_modified", "; ".join(errors), recoverable=False)
+
+    def _verify_validation_history(self) -> None:
+        errors = validation_history_errors(self.plan.run_dir, self.store.state)
+        if errors:
+            self._abort("validation_evidence_modified", "; ".join(errors), recoverable=False)
 
     def _verify_frozen_brief(self) -> None:
         if hashlib.sha256(self.store.path("brief.md").read_bytes()).hexdigest() != self.store.state["brief_sha256"]:

@@ -45,7 +45,7 @@ def test_independent_review_and_revision(tmp_path, monkeypatch, fake_registry, s
         assert schema_errors("review", review) == [] and review["reviewer"]["session_id"] == reviewers[cycle - 1]["session_id"]
         assert (directory / f"review/review-{cycle:02d}.md").exists()
         validation = json.loads((directory / f"validation/cycle-{cycle:02d}/results.json").read_text())
-        assert validation["commands"][0]["status"] == "passed"
+        assert validation["commands"][0]["status"] == "PASS"
         assert all(f"cycle-{cycle:02d}" in c["stdout_path"] for c in validation["commands"])
         trees.append(json.loads((directory / f"implementation/cycle-{cycle:02d}/git.json").read_text())["snapshot_tree"])
     assert len(set(trees)) == cycles
@@ -83,24 +83,35 @@ def test_duplicate_reviewer_session_refused(tmp_path, monkeypatch, fake_registry
     assert outcome.state["failure"]["recoverable"] is False
 
 
-def test_validation_failure_never_invokes_reviewer(tmp_path, monkeypatch, fake_registry):
+def test_validation_failure_is_reviewed_but_reviewer_cannot_override(tmp_path, monkeypatch, fake_registry):
     _, outcome = run_fixture(tmp_path, monkeypatch, commands=[{"name": "fails", "kind": "test", "run": "false"}])
-    assert outcome.state["failure"]["reason"] == "validation_failed"
-    assert outcome.state["review_cycle"] == 0 and not outcome.state["review_history"]
+    assert outcome.state["state"] == "HUMAN_BLOCKED"
+    assert "reviewer cannot override" in outcome.state["human_gate"]["reason"]
+    assert outcome.state["review_cycle"] == 1 and outcome.state["review_history"][0]["status"] == "PASS"
+    assert outcome.state["last_commit"] is None
 
 
-def test_revision_validation_failure_stops_before_next_review(tmp_path, monkeypatch, fake_registry):
+def test_revision_validation_failure_is_fresh_and_blocks_reviewer_pass(tmp_path, monkeypatch, fake_registry):
     _, outcome = run_fixture(tmp_path, monkeypatch, "REVISE,PASS", commands=[
         {"name": "initial-only", "kind": "test", "run": 'test "$(tail -c 1 feature.txt)" = 0'}])
-    assert outcome.state["failure"]["reason"] == "validation_failed"
-    assert outcome.state["review_cycle"] == 1 and len(outcome.state["revision_history"]) == 2
-    assert not (outcome.run_dir / "review/review-02.json").exists()
+    assert outcome.state["state"] == "HUMAN_BLOCKED"
+    assert outcome.state["review_cycle"] == 2 and len(outcome.state["revision_history"]) == 2
+    assert len(outcome.state["validation_history"]) == 2
+    assert outcome.state["validation_history"][0]["passed"] is True
+    assert outcome.state["validation_history"][1]["passed"] is False
+    assert (outcome.run_dir / "review/review-02.json").exists()
+    assert outcome.state["last_commit"] is None
 
 
-def test_validation_content_mutation_is_detected(tmp_path, monkeypatch, fake_registry):
-    _, outcome = run_fixture(tmp_path, monkeypatch, commands=[{"name": "mutates", "kind": "test", "run": "printf mutation > feature.txt"}])
-    assert outcome.state["failure"]["reason"] == "validation_modified_worktree"
-    assert outcome.state["review_cycle"] == 0
+def test_validation_content_mutation_is_discarded_with_snapshot(tmp_path, monkeypatch, fake_registry):
+    root, outcome = run_fixture(tmp_path, monkeypatch, commands=[
+        {"name": "mutates-copy", "kind": "test", "run": "printf mutation > feature.txt"},
+        {"name": "sees-mutation", "kind": "test", "run": "test \"$(cat feature.txt)\" = mutation"},
+    ])
+    assert outcome.state["state"] == "COMPLETED"
+    worktree = Path(outcome.state["worktree"])
+    assert (worktree / "feature.txt").read_text() == "hello from the fake agent\n0"
+    assert git(root, "show", f"{outcome.state['last_commit']}:feature.txt") == "hello from the fake agent\n0"
 
 
 def test_missing_reviewer_refuses_without_creation(tmp_path, fake_registry):
@@ -170,6 +181,16 @@ def test_resume_budget_requires_human_increase(tmp_path, monkeypatch, fake_regis
     path.write_text(yaml.safe_dump(config))
     resumed = Runner(resume_preflight(outcome.run_dir, root)).run()
     assert resumed.state["state"] == "COMPLETED"
+
+
+def test_resume_rejects_review_linked_to_stale_validation(tmp_path, monkeypatch, fake_registry):
+    root, outcome = run_fixture(tmp_path, monkeypatch, "REVISE,BLOCK")
+    path = outcome.run_dir / "state.json"
+    state = json.loads(path.read_text())
+    state["review_history"][1]["validation_artifact"] = state["review_history"][0]["validation_artifact"]
+    path.write_text(json.dumps(state))
+    with pytest.raises(PreflightError, match="cycle/source"):
+        resume_preflight(outcome.run_dir, root)
 
 
 def test_completed_and_nonrecoverable_runs_cannot_resume(tmp_path, monkeypatch, fake_registry):

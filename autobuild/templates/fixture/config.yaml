@@ -25,6 +25,6 @@ validation:
   commands:
     - name: content-check
       kind: test
-      run: grep -qx 'Autobuild 0.2 verification' autobuild-test.txt
+      command: [grep, -qx, "Autobuild 0.2 verification", autobuild-test.txt]
 notifications: {enabled: false, provider: console}
 control: {remote_stop_enabled: false, provider: none}

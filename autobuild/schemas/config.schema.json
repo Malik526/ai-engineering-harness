@@ -113,6 +113,11 @@
           "type": "array",
           "items": { "$ref": "#/$defs/validation_command" }
         },
+        "runtime_paths": {
+          "description": "Ignored dependency/runtime directories mounted read-only into the disposable validation snapshot.",
+          "type": "array", "maxItems": 20, "uniqueItems": true,
+          "items": { "$ref": "#/$defs/relative_path" }
+        },
         "browser_gates": {
           "description": "Controller-owned argv commands, isolated with Bubblewrap; outputs relative to AUTOBUILD_BROWSER_OUTPUT.",
           "type": "array", "maxItems": 20,
@@ -172,18 +177,25 @@
     "validation_command": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "kind", "run"],
+      "required": ["name", "kind"],
+      "oneOf": [
+        { "required": ["command"], "not": { "required": ["run"] } },
+        { "required": ["run"], "not": { "required": ["command"] } }
+      ],
       "properties": {
         "name": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$" },
         "kind": { "enum": ["setup", "test", "lint", "typecheck", "build", "other"] },
         "run": {
-          "description": "Shell command. ${PROJECT_ROOT} and ${WORKTREE} are substituted.",
+          "description": "Legacy shell command, confined identically but discouraged. Prefer command argv.",
           "type": "string", "minLength": 1
         },
+        "command": { "$ref": "#/$defs/argv" },
         "cwd": { "$ref": "#/$defs/relative_path" },
         "env": { "type": "object", "additionalProperties": { "type": "string" } },
         "timeout_seconds": { "type": "integer", "minimum": 1, "maximum": 86400 },
         "required": { "description": "A failing required command fails the run. Defaults to true.", "type": "boolean" },
+        "network": { "description": "Network policy; defaults to none. Host access is explicit and visible in evidence.",
+          "enum": ["none", "host"] },
         "paths": {
           "description": "Run only when a changed file matches one of these fnmatch patterns; otherwise recorded as skipped.",
           "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 }

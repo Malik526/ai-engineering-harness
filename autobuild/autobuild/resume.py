@@ -19,6 +19,7 @@ from autobuild.schemas import schema_errors
 from autobuild.secret_files import secret_like
 from autobuild.validation_runner import command_unavailable
 from autobuild.browser_contract import history_errors
+from autobuild.validation_contract import history_errors as validation_history_errors
 
 
 def resume_preflight(run: Path, project_root: Path) -> RunPlan:
@@ -37,7 +38,7 @@ def resume_preflight(run: Path, project_root: Path) -> RunPlan:
         if state["state"] == "FAILED" and not state["failure"]["recoverable"]:
             raise ValueError("failure is not recoverable")
         if state["review_mode"] != "independent" or not {"protected_refs", "review_history", "revision_history",
-                                                         "final_review_status"} <= state.keys():
+                                                         "validation_history", "final_review_status"} <= state.keys():
             raise ValueError("legacy runs lack the evidence needed for safe resume")
         attempts = state["revision_history"]
         if not attempts or [r["attempt"] for r in attempts] != list(range(1, len(attempts) + 1)):
@@ -62,6 +63,7 @@ def resume_preflight(run: Path, project_root: Path) -> RunPlan:
         meta, body = split_front_matter(frozen.read_text())
         issues = brief_errors(meta, body)
         issues.extend(history_errors(directory, state))
+        issues.extend(validation_history_errors(directory, state))
         for record in state.get("browser_history", []):
             expected = f"browser/cycle-{record['attempt']:02d}/results.json"
             if record["artifact"] != expected or record["attempt"] > len(attempts):
@@ -125,8 +127,22 @@ def resume_preflight(run: Path, project_root: Path) -> RunPlan:
             validation_artifact = directory / record["validation_artifact"]
             if not is_within(validation_artifact, directory) or not validation_artifact.is_file():
                 issues.append("persisted validation artifact is missing or outside the run")
-            if record.get("browser_artifact") not in (None, *[r["artifact"] for r in state.get("browser_history", [])]):
+            browser_records = {item["artifact"]: item for item in state.get("browser_history", [])}
+            validation_records = {item["artifact"]: item for item in state.get("validation_history", [])}
+            if record.get("browser_artifact") not in (None, *browser_records):
                 issues.append("review references missing browser history")
+            elif record.get("browser_artifact"):
+                browser_record = browser_records[record["browser_artifact"]]
+                if (browser_record["review_cycle"], browser_record["snapshot_tree"]) != (
+                        record["cycle"], record["snapshot_tree"]):
+                    issues.append("review browser evidence does not match its cycle/source")
+            if record["validation_artifact"] not in validation_records:
+                issues.append("review references missing validation history")
+            else:
+                validation_record = validation_records[record["validation_artifact"]]
+                if (validation_record["review_cycle"], validation_record["snapshot_tree"]) != (
+                        record["cycle"], record["snapshot_tree"]):
+                    issues.append("review validation evidence does not match its cycle/source")
         if issues:
             raise PreflightError(issues)
         return RunPlan(config=config, project_root=root, brief_path=frozen, meta=meta, body=body,

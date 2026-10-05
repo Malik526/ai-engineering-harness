@@ -29,8 +29,8 @@ the review.
 | `implementation/summary.md` | supplemental | implementer | The implementer's report rendered as Markdown |
 | `validation/results.json` | authoritative_evidence | controller | Commands the controller ran, with status and exit codes (validation.schema.json) |
 | `implementation/cycle-NN/` | authoritative_evidence | controller | Per-attempt prompt, Git snapshot, diff and changed files; result/summary remain supplemental |
-| `validation/cycle-NN/results.json` | authoritative_evidence | controller | Controller validation for each implementation attempt |
-| `validation/cycle-NN/logs/` | authoritative_evidence | controller | stdout/stderr of each validation attempt |
+| `validation/cycle-NN/results.json` | authoritative_evidence | controller | Snapshot/config-bound confined validation results and hashed log manifest for each attempt |
+| `validation/cycle-NN/logs/` | authoritative_evidence | controller | Raw stdout/stderr of each confined command, hash-bound by the attempt manifest |
 | `browser/cycle-NN/results.json` | authoritative_evidence | controller | Immutable gate results, snapshot identity and hashed file manifest |
 | `browser/cycle-NN/<gate-id>/evidence.json` | authoritative_evidence | controller | Gate argv, environment hash, outcome, timing and bounded summaries |
 | `browser/cycle-NN/<gate-id>/` | authoritative_evidence | controller | Raw command/service logs and confined artifacts/ screenshots, traces, videos or reports |
@@ -56,12 +56,12 @@ comparison snapshots; `.controller.lock` prevents concurrent controllers.
 
 ## Rules
 
-- **Validation is re-run, not reported.** `validation/results.json` counts as authoritative evidence only when `producer` is `controller`. The implementer's `tests_reported` in `result.json` is supplemental, and the notification marks it that way.
+- **Validation is re-run, confined, and not reported.** `validation/results.json` counts as authoritative evidence only when `producer` is `controller` and the command ran through the mandatory snapshot sandbox. The implementer's `tests_reported` in `result.json` is supplemental, and the notification marks it that way.
 - **The brief is frozen.** The controller copies the approved brief into the run and records its SHA-256 as `brief_sha256`. The reviewer judges that copy. Edits to the roadmap brief during a run don't affect it.
 - **Diffs come from git.** `diff.patch`, `changed-files.txt` and `git.json` are produced by the controller from a snapshot of the worktree (taken through a temporary index, before validation runs), never written by an agent. The checkpoint commit is built from exactly that snapshot's tree.
 - **The prompt is recorded.** `implementation/prompt.md` is the exact input the implementer received, so a reviewer can tell an implementation error from an instruction error.
 - **Review status is structured.** Only a schema-valid `review-NN.json` moves the state machine. PASS cannot carry blocker/major findings; REVISE requires findings; BLOCK requires `blocked_reason`. Legacy BLOCKED is accepted and normalized to BLOCK. The runner requires brief, git_diff, changed_files and validation_output evidence, matching run/implementation/cycle and unique finding IDs. Actual provider/session/time come from the controller, not agent claims.
-- **State retains history.** `review_cycle`, `agent_sessions`, `review_history`, `revision_history`, `final_review_status` and `protected_refs` record observed identities, outcomes, snapshot trees, artifact pointers and resumption IDs. Invalid writes are rejected transactionally. No final checkpoint occurs before PASS.
+- **State retains history.** `review_cycle`, `agent_sessions`, `review_history`, `revision_history`, `validation_history`, `browser_history`, `final_review_status` and `protected_refs` record observed identities, outcomes, snapshot trees, artifact pointers, hashes and resumption IDs. Invalid writes are rejected transactionally. No final checkpoint occurs before reviewer PASS plus required validation PASS.
 - **Runs are local.** `runs/` is git-ignored in projects. Logs may contain environment details and shouldn't be committed.
 
 ## Browser Evidence (0.4)
@@ -82,3 +82,16 @@ Artifacts/logs reject links and special files; artifacts also reject secret-like
 names and have collection budgets. Hash integrity detects accidental or agent
 modification while the controller's state is trusted; it is not a cryptographic
 guarantee against a human rewriting both state and files. See `BROWSER_GATES.md`.
+
+## Normal Validation Evidence (0.5)
+
+`validation.schema.json` v2 records run/attempt/upcoming review cycle, real
+worktree identity, HEAD and exact synthetic snapshot tree, brief/validation-policy
+hashes, command id/argv/contract/cwd/required/network/sandbox/environment keys,
+timings, exit/status/detail, bounded summaries, raw log paths, and a hash/size
+manifest. Environment values are not serialized. `validation_history` anchors
+each numbered document by hash and source identity; reviewers link the exact
+artifact they saw. The controller verifies the manifest, frozen validation
+policy, matching per-attempt Git evidence, aggregate status, and history before
+review, resumed implementation, and checkpoint. Historical attempts remain
+immutable; only a fresh artifact for the current source can authorize checkpoint.

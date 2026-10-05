@@ -30,8 +30,9 @@ your summary.
 
 ## Validation the Controller Will Run
 
-After you finish, the controller re-runs these commands in the worktree. Only
-its results count. Run them yourself first where practical:
+After you finish, the controller materializes your exact source snapshot and
+runs these commands in disposable fail-closed confinement. Only its results
+count. Run them yourself first where practical:
 
 ${validation_commands}
 

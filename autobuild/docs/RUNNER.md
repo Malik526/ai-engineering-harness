@@ -1,4 +1,4 @@
-# Independent Review And Browser Runner (Phase 0.4)
+# Confined Validation And Independent Review Runner (Phase 0.5)
 
 `autobuild run` takes one approved brief through implementation and review and stops
 for the human:
@@ -10,8 +10,10 @@ brief → preflight → branch + worktree → configured implementer → git evi
                                 BLOCK / cycle limit → HUMAN_BLOCKED
 ```
 
-The bounded review loop is implemented. There is no automatic recovery of failed
-validation/provider calls and no roadmap rollover, merge, push or deployment.
+The bounded review loop is implemented. Fixable validation failures can drive a
+reviewer REVISE cycle; infrastructure ERROR and reviewer PASS over required
+non-PASS evidence stop for a human. There is no roadmap rollover, merge, push,
+or deployment.
 
 ## Usage
 
@@ -43,7 +45,7 @@ nothing.
 6. The base branch exists and is either protected (e.g. `main`) or an automation branch (`<branch_prefix>*`). The run branch is never protected.
 7. `project_state` and `adr_directory` exist. A missing `roadmap` is only a warning.
 8. The worktree root is outside the project and the worktree path is free.
-9. Every validation command's program is available, and a brief with `tests_required` has at least one `test` command.
+9. Validation contracts are well formed, runtime dependency paths are present and safe, and a brief with `tests_required` has at least one `test` command. Executable availability is checked inside confinement; a missing tool records ERROR.
 
 ## Git Isolation
 
@@ -85,25 +87,35 @@ that sandbox in a later phase.
 ## Controller Validation
 
 After the implementer finishes, the controller snapshots the worktree
-(`git.json`, `changed-files.txt`, `diff.patch`) and then runs
-`validation.commands` from the project config in the worktree. Each command
+(`git.json`, `changed-files.txt`, `diff.patch`), materializes that exact Git tree
+into a disposable workspace, and runs `validation.commands` there through the
+shared mandatory Bubblewrap backend. Each command
 supports:
 
 | Field | Meaning |
 | --- | --- |
-| `name`, `kind` | `kind` ∈ setup, test, lint, typecheck, build, other |
-| `run` | Shell command. `${PROJECT_ROOT}` and `${WORKTREE}` are substituted |
+| `name`, `kind` | Stable id and `kind` in setup, test, lint, typecheck, build, other |
+| `command` | Preferred explicit argv. `${PROJECT_ROOT}` and `${WORKTREE}` resolve to the disposable snapshot |
+| `run` | Legacy shell string, still confined; mutually exclusive with `command` |
 | `cwd` | Repository-relative directory |
-| `env` | Extra environment (substituted) |
+| `env` | Explicit variables only; reserved loader/path/proxy/controller keys are rejected and values are not written to evidence |
 | `timeout_seconds` | Default 1800 |
 | `required` | Default true. Only failing required commands fail the run |
-| `paths` | fnmatch patterns. The command runs only if a changed file matches; otherwise it's recorded as `skipped` |
+| `network` | `none` by default; `host` is an explicit, evidence-visible opt-in |
+| `paths` | fnmatch patterns. Nonmatching commands are recorded SKIPPED |
 
-All commands run even after a failure. Results, with stdout and stderr logs,
-go to `validation/cycle-NN/` with a latest `validation/results.json`. If validation
-changes the implementation snapshot, the run fails as non-recoverable; build
-outputs must be ignored. Branch/HEAD/protected refs are checked too. A failed required command ends the run
-`FAILED`. No repair is attempted.
+The sandbox exposes a minimal system/runtime tool set, the snapshot, explicit
+read-only `validation.runtime_paths`, and private writable workspace/home/cache/
+temp/scratch paths. It does not expose the real worktree, Git metadata, user home,
+SSH material, unrelated repositories, or inherited credentials. All commands run
+even after failure and share the disposable workspace so setup/build output can be
+consumed by later commands and browser gates. It is destroyed after the attempt.
+
+Results and hashed stdout/stderr logs go to `validation/cycle-NN/`, with a latest
+`validation/results.json` alias. Missing Bubblewrap/tool/mount, policy/setup errors,
+and timeouts are ERROR; nonzero command exits are FAIL. There is no unsandboxed
+fallback. Required non-PASS reaches review for possible REVISE but blocks every
+checkpoint independently of reviewer PASS. See `VALIDATION_CONFINEMENT.md`.
 
 **Browser validation** runs next through `validation.browser_gates`. See
 `BROWSER_GATES.md` for argv configuration, server lifecycle and confinement.
@@ -128,6 +140,8 @@ controller commits only when all of these hold:
 5. the run branch is not protected.
 6. required browser gates PASS on this exact attempt/snapshot, and preserved
    browser evidence/artifacts still match the controller's hash records.
+7. normal-validation evidence for this exact attempt/snapshot/config and its raw
+   log manifest still matches the hashes anchored in `validation_history`.
 
 The commit contains the pre-validation snapshot tree, with message
 `autobuild(<id>): <title>` and `Autobuild-Run` / `Autobuild-Implementer`
@@ -140,8 +154,8 @@ Autobuild, manual development never commits automatically
 | Final state | When |
 | --- | --- |
 | `COMPLETED` | Controller validation and independent review passed; checkpointed if eligible. Human owns merge |
-| `FAILED` | Provider crash or timeout, no changes, agent commit, branch moved, protected ref moved, secret-like files, validation failure, controller error. `failure.reason` names which |
-| `HUMAN_BLOCKED` | Review BLOCK, exhausted review budget, or browser requirement. Only a PASS may reach checkpoint eligibility |
+| `FAILED` | Provider crash or timeout, no changes, agent commit, branch/ref/evidence tampering, secret-like files, or controller error. `failure.reason` names which |
+| `HUMAN_BLOCKED` | Review BLOCK/budget, required validation/browser non-PASS plus reviewer PASS, or missing browser coverage. No non-PASS evidence can checkpoint |
 | `STOPPED` | Ctrl-C: the provider process group is terminated and the state recorded. Remote stop arrives in 0.6 |
 
 Every run ends with a summary (also saved as `report.md`): implementation,
@@ -188,8 +202,9 @@ human increase (schema maximum 10); prior cycles are never reset. A surviving
 `.controller.lock` must be investigated before a human removes it. Missing
 provider sessions fail clearly without fallback to a new session/provider.
 
-Resume checks all preserved browser manifests, hashes and identity records, then
-runs fresh gates after the resumed implementation. It never reuses prior PASS.
+Resume checks all preserved normal-validation and browser manifests, log/artifact
+hashes and identity records, then runs fresh gates after the resumed implementation.
+It never reuses prior PASS for changed source.
 Missing gate configuration requires a new run because execution config is frozen.
 Protected refs changed by unrelated human work also block resume; start a new
 run rather than silently rebasing preserved work.

@@ -23,7 +23,9 @@ def _validation_lines(commands: Sequence[dict[str, Any]]) -> str:
     for spec in commands:
         where = f" (in `{spec['cwd']}`)" if spec.get("cwd") else ""
         scope = f"; only when files matching {', '.join(spec['paths'])} change" if spec.get("paths") else ""
-        lines.append(f"- {spec['name']} [{spec['kind']}]: `{spec['run']}`{where}{scope}")
+        display = spec.get("display") or spec.get("command") or spec.get("run")
+        rendered = " ".join(display) if isinstance(display, list) else display
+        lines.append(f"- {spec['name']} [{spec['kind']}]: `{rendered}`{where}{scope}")
     return "\n".join(lines)
 
 

@@ -41,7 +41,7 @@ Every artifact pattern must match at least one regular output file, even on FAIL
 Use a finally/teardown hook to preserve failure screenshots/traces/reports.
 All paths are relative to `AUTOBUILD_BROWSER_OUTPUT`, a new writable output
 directory provided by the controller. The worktree itself is read-only: install
-dependencies/build outputs during normal validation first, then configure test
+dependencies/build outputs during confined normal validation first, then configure test
 reporters/caches to use the output directory or private temporary storage.
 Explicit env is for nonsecret test settings only. PATH/HOME/temp, preload/interpreter
 hooks, proxies and controller-owned keys cannot be overridden. Environment values
@@ -106,7 +106,7 @@ and hash manifests prevent arbitrary host-path artifact collection. Worktree
 and Git metadata are not writable. Host home, temp and runtime socket paths are
 hidden; external network is absent. This is scoped browser confinement, not a
 full hostile-process security boundary. System/controller assets are readable;
-ordinary validation is still unsandboxed, content scanning/resource quotas are
+normal validation uses 0.5's shared snapshot sandbox; content scanning/resource quotas are
 not implemented, and sensitive data already inside the worktree is not sanitized.
 Git snapshot identity excludes ignored build outputs and dependency trees;
 installed runtime/browser binary hashes are not captured in 0.4. Pin dependencies

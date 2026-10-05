@@ -96,8 +96,9 @@ def create_fixture(*, implementer: str, name: Optional[str] = None, root: Option
         shutil.copyfile(source / "V-1.md", path / "docs/roadmap/V-1.md")
         document = load_yaml(config)
         document["validation"].update(browser_tool="playwright", commands=[
-            {"name": "dependencies", "kind": "setup", "run": "npm ci --ignore-scripts --offline --no-audit --no-fund"},
-            {"name": "html-exists", "kind": "test", "run": "test -f index.html"}], browser_gates=[
+            {"name": "dependencies", "kind": "setup", "command": ["npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"],
+             "network": "host"},
+            {"name": "html-exists", "kind": "test", "command": ["test", "-f", "index.html"]}], browser_gates=[
             {"id": "counter", "kind": "e2e", "command": ["node", "smoke.cjs"], "timeout_seconds": 60,
              "required": True, "artifacts": ["counter.png", "trace.zip", "report.json"],
              "service": {"command": ["python3", "-m", "http.server", "38404", "--bind", "127.0.0.1"],

@@ -45,7 +45,7 @@ validation:
   commands:                  # controller-owned validation; ${PROJECT_ROOT} / ${WORKTREE} substituted
     - name: tests
       kind: test             # setup | test | lint | typecheck | build | other
-      run: pytest -q
+      command: [python, -m, pytest, -q]
       # cwd: web             # repository-relative
       # env: {PYTHONPATH: "${WORKTREE}/src"}
       # paths: ["web/*"]     # run only when matching files changed
