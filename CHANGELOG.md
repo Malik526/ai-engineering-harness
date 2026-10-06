@@ -2,6 +2,88 @@
 
 ## 2026-10-05
 
+### Autobuild 0.7 - Bounded Autonomous-Run Governance
+
+- Added controller-owned budgets checked before every implementation,
+  validation, browser and review operation:
+  - existing budgets reused: `max_review_cycles` and `rollover.max_rollovers`;
+  - new optional budgets: `max_runtime_minutes` (active controller time),
+    `max_revision_attempts`, `max_validation_attempts`, `max_browser_attempts`
+    and `max_usage_tokens` (provider-reported tokens only; no cost estimates).
+- A watchdog outside the model process terminates a running provider when the
+  runtime budget ends or a remote stop arrives.
+- Every finished run now records one canonical `stop_reason` (completed, remote
+  stop, a specific budget, provider/validation/browser failure, safety
+  violation, …) with the limit and its use. Budget stops end `HUMAN_BLOCKED`
+  and remote stops `STOPPED`; both preserve the worktree, uncommitted changes
+  and evidence, and never checkpoint.
+- Implemented the file remote-stop provider: `autobuild stop RUN [--reason]`
+  and `--clear`. The controller acknowledges handled requests, and resume
+  refuses while one is pending.
+- Notifications are now wired into the runner: one when the run ends, one per
+  rollover. They are built from controller records only (event, stop reason,
+  providers, counts, validation, browser, review, next action). Console, file
+  and SMTP email providers; delivery failures are logged and never change the
+  run.
+- Resume applies changed budgets only with `--override-limits`, records each
+  override, and refuses while a budget is exhausted. `state.governance` keeps
+  controller sessions and per-operation timing, provider and usage; the report
+  shows budgets, time by phase and provider, and overrides.
+- Updated RUNNER, ARCHITECTURE, SAFETY_MODEL, CONTROL_CONTRACT,
+  NOTIFICATION_CONTRACT, the enforcement matrix, the config template, ADR 0007
+  and `EVALUATION_0_7.md`. No merge, push or harness commit.
+- Validation: 466 combined tests pass (438 before, 28 new), plus core
+  schema/example, instruction-audit, compile and diff checks.
+- Live remote stop: a real Codex run stopped within one poll interval, with
+  its processes gone and the work preserved.
+- Live runtime budget: a 1-minute Codex run had its revision terminated at
+  61.7 s, then resumed with `--override-limits` and completed, with counters
+  and runtime carried across sessions.
+- Live rollover: with every budget configured, the counters were exact.
+- Live notifications: completion, budget-stop, stopped and rollover
+  notifications all verified.
+
+### Autobuild 0.6 - Reviewer Portability and Bounded Provider Rollover
+
+- Fixed the Claude reviewer. Claude Code rejected the review schema's top-level
+  `allOf` as a tool `input_schema`. Adapters now project one canonical schema
+  into their CLI's wire syntax (Claude: drop top-level combinators; Codex:
+  existing strict subset), and only by relaxing it. Answers are validated
+  against the canonical schema, and `review_contract.py` normalizes every
+  reviewer to the same PASS / REVISE / BLOCK review.
+- Added provider-neutral failure classification. Adapters map their CLI's own
+  error output (checked against real Codex and Claude samples) to kinds;
+  only quota, hard-limit, unavailable-provider and lost/exhausted-session
+  failures can trigger rollover. Unknown output never does.
+- Added bounded implementer rollover (`rollover` config: max 1 per run,
+  `automatic` or `human` approval, ordered replacements, optional triggers).
+  On an eligible failure the controller always writes a hashed handoff package
+  (`rollover/rollover-NN/`). It then blocks, prepares for `autobuild resume`,
+  or re-verifies the handoff against the live repository and starts the
+  replacement as a new session with a takeover prompt.
+- The replacement's work always gets fresh validation, browser gates and
+  review; earlier evidence stays historical. `revision_history` records each
+  attempt's provider, mode (initial / resume / rollover) and failure;
+  `rollover_history` records every decision. Checkpoints carry
+  `Autobuild-Rollover`; the report, `resume --dry-run` and `autobuild evidence`
+  show the active implementer, reviewer and rollovers.
+- Fixed a 0.5 prompt defect found live: argv validation commands are shown with
+  shell quoting. Also clearer reports for blocked rollovers and for a Codex run
+  with no final message.
+- Updated PROVIDERS, RUNNER, ARCHITECTURE, ARTIFACT_CONTRACT, SAFETY_MODEL, the
+  enforcement matrix, the config template, ADR 0006 and `EVALUATION_0_6.md`.
+  No merge, push or harness commit.
+- Validation: 438 combined tests pass (389 before, 49 new), plus core
+  schema/example, instruction-audit, compile and diff checks.
+- Live reviewer matrix: Claude→Claude, Claude→Codex, Codex→Claude and
+  Codex→Codex all reached reviewer PASS and a run-branch checkpoint.
+- Live rollover after Codex's real usage limit: Codex → Claude with fresh
+  validation, browser and review. Live rollover during an open REVISE (induced
+  Codex session loss): Claude kept Codex's work, fixed the open finding, and
+  passed fresh validation, browser and review before checkpoint.
+- Live blocked rollovers (replacement unavailable, unsupported transition)
+  stopped with no checkpoint. No fixture `main` moved.
+
 ### Autobuild 0.5 - Takeover Verification and Confinement Hardening
 
 - Claude Code took over the uncommitted 0.5 worktree after Codex hit its usage
