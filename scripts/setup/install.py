@@ -3,7 +3,9 @@
 
 Reads scripts/setup/links.manifest and, for each <source> <target> pair,
 reports or establishes `target -> <repo>/<source>` as an absolute symlink.
-Also reconciles the owned runtime fragments for installed provider executables.
+Also reconciles the owned runtime fragments for installed provider executables,
+and reports whether ~/.local/bin (where commands such as `autobuild` are linked)
+is on PATH. It never edits shell startup files.
 
     install.py            check only (default); exit 1 unless every link is OK
     install.py --apply    create missing links and reconcile runtime fragments
@@ -73,6 +75,18 @@ def status(source: Path, target: Path) -> str:
     return "ADOPTABLE" if same_content(source, target) else "CONFLICT"
 
 
+def path_report(home: Path, pairs: list[tuple[Path, Path]]) -> str:
+    """Whether the user-local command directory is on PATH. A warning, never a failure or an edit."""
+    commands = home / ".local" / "bin"
+    if not any(target.parent == commands for _, target in pairs):
+        return ""
+    entries = [Path(entry).expanduser() for entry in os.environ.get("PATH", "").split(os.pathsep) if entry]
+    if any(entry.resolve() == commands.resolve() for entry in entries):
+        return f"OK        {commands} is on PATH (commands: autobuild)"
+    return (f"WARNING   {commands} is not on PATH, so `autobuild` will not be found. Add this line to your shell "
+            f"profile (e.g. ~/.bashrc), then open a new shell: export PATH=\"$HOME/.local/bin:$PATH\"")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--apply", action="store_true", help="create missing links")
@@ -89,7 +103,8 @@ def main() -> int:
     problems = 0
 
     providers = installed_providers()
-    for source, target in read_manifest(args.home, providers):
+    pairs = read_manifest(args.home, providers)
+    for source, target in pairs:
         state = status(source, target)
         note = ""
         if apply and state == "MISSING":
@@ -109,6 +124,8 @@ def main() -> int:
         if state not in ("OK", "LINKED", "ADOPTED"):
             problems += 1
         print(f"{state:<9} {target} -> {source.relative_to(REPO_ROOT)} {note}".rstrip())
+
+    print(path_report(args.home, pairs))
 
     for report in reconcile(REPO_ROOT, args.home, providers, apply=apply):
         print(report)

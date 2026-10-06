@@ -375,3 +375,49 @@ def test_interruption_terminates_sandbox_and_cleans_workspace(confined, monkeypa
     with pytest.raises(KeyboardInterrupt):
         execute([command("interrupt", ["true"])])
     assert len(terminated) == 1
+
+
+def test_runtime_paths_come_from_the_project_checkout_read_only(tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / ".gitignore").write_text("deps/\n")
+    (project / "app.txt").write_text("app\n")
+    git(project, "init", "-q", "-b", "main")
+    git(project, "-c", "user.name=T", "-c", "user.email=t@e", "commit", "-qm", "init", "--allow-empty")
+    git(project, "add", "-A")
+    git(project, "-c", "user.name=T", "-c", "user.email=t@e", "commit", "-qm", "app")
+    (project / "deps").mkdir()
+    (project / "deps" / "tool.txt").write_text("installed dependency\n")
+    worktree = tmp_path / "run-worktree"
+    git(project, "worktree", "add", "-q", "-b", "agent/run", str(worktree))
+    assert not (worktree / "deps").exists()  # a fresh run worktree never holds ignored dependency trees
+    tree = git(worktree, "rev-parse", "HEAD^{tree}").strip()
+    script = 'test "$(cat deps/tool.txt)" = "installed dependency" && ! printf x > deps/tool.txt'
+    commands = [{"name": "uses-deps", "kind": "test", "command": ["sh", "-c", script]}]
+    outcome = run_validation(run_id="2026-10-05-T-1", commands=commands, project_root=project, worktree=worktree,
+                             changed_files=["app.txt"], run_dir=tmp_path / "run", snapshot_tree=tree, head_commit="0" * 40,
+                             config={"version": 1, "validation": {"commands": commands, "runtime_paths": ["deps"]}})
+    try:
+        assert outcome.document["commands"][0]["status"] == "PASS", outcome.document["commands"][0]["stderr_summary"]
+    finally:
+        outcome.cleanup()
+    assert (project / "deps" / "tool.txt").read_text() == "installed dependency\n"
+    with pytest.raises(ValueError, match="runtime_path missing"):
+        run_validation(run_id="2026-10-05-T-1", commands=commands, project_root=project, worktree=worktree,
+                       changed_files=["app.txt"], run_dir=tmp_path / "run2", snapshot_tree=tree, head_commit="0" * 40,
+                       config={"version": 1, "validation": {"commands": commands, "runtime_paths": ["absent"]}})
+
+
+@pytest.mark.skipif(not Path("/etc/alternatives").is_dir(), reason="host has no /etc/alternatives")
+def test_system_binaries_resolving_through_alternatives_still_load(confined):
+    _, _, _, execute = confined
+    links = [p for p in sorted(Path("/etc/alternatives").iterdir())
+             if p.is_symlink() and p.resolve().is_relative_to("/usr") and p.resolve().exists()]
+    assert links, "no alternatives entry pointing into /usr to probe"
+    probe = ["sh", "-c", 'for p in "$@"; do test -e "$p" || { echo "missing $p" >&2; exit 3; }; done', "probe",
+             *[str(p) for p in links[:20]]]
+    commands = [command("alternatives", probe)]
+    if shutil.which("ffmpeg"):
+        commands.append(command("ffmpeg-loads", ["ffmpeg", "-version"]))
+    outcome, _ = execute(commands)
+    assert all(r["status"] == "PASS" for r in outcome.document["commands"]), outcome.document["commands"]

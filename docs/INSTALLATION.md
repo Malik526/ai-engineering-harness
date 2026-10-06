@@ -28,6 +28,35 @@ The real-home setup honors `CODEX_HOME` and `CLAUDE_CONFIG_DIR`. Use
 `--home /isolated/home` for a fresh-home simulation; this ignores those overrides
 and uses the providers available on `PATH`. It does not copy authentication.
 
+### The `autobuild` command
+
+Setup links the Autobuild CLI as a user-local command:
+
+```text
+~/.local/bin/autobuild -> ~/ai-engineering-harness/autobuild/bin/autobuild
+```
+
+The wrapper resolves its own symlink, so it always runs the harness copy with
+the harness's `autobuild/.venv`. That virtualenv is created once:
+
+```bash
+cd ~/ai-engineering-harness/autobuild
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+```
+
+Setup reports whether `~/.local/bin` is on `PATH` (`OK` or `WARNING`) and never
+edits shell startup files. If it warns, add this line to your shell profile
+(for example `~/.bashrc`) and open a new shell:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+Verify with `which autobuild` (expect `~/.local/bin/autobuild`) and
+`autobuild check`. An existing different `~/.local/bin/autobuild` is reported as
+`CONFLICT` and left untouched. The command needs no agent provider, so it
+installs the same way for Claude-only, Codex-only, both or neither.
+
 ## Existing Machine (Migration)
 
 When a runtime path already holds a regular file identical to the canonical

@@ -39,6 +39,31 @@ def test_fresh_install_check_and_audit(tmp_path, providers):
     assert (home / ".agents/GIT.md").is_symlink()
     for provider in ("claude", "codex"):
         assert (home / f".{provider}").exists() == (provider in providers)
+    command = home / ".local/bin/autobuild"
+    assert command.is_symlink() and command.resolve() == (ROOT / "autobuild/bin/autobuild").resolve()
+    assert "is not on PATH" in apply.stdout  # reported, never fixed by editing shell files
+    assert not (home / ".bashrc").exists() and not (home / ".profile").exists()
+
+
+def test_autobuild_command_runs_from_any_directory_when_on_path(tmp_path):
+    home = tmp_path / "home"
+    env = {**os.environ, "PATH": f"{home / '.local/bin'}{os.pathsep}{os.environ['PATH']}"}
+    apply = subprocess.run([sys.executable, str(ROOT / "scripts/setup/install.py"), "--home", str(home), "--apply"],
+                           env=env, capture_output=True, text=True)
+    assert f"{home / '.local/bin'} is on PATH" in apply.stdout
+    done = subprocess.run(["autobuild", "check"], cwd=tmp_path, env=env, capture_output=True, text=True)
+    assert done.returncode == 0 and "OK   schema config" in done.stdout, done.stdout + done.stderr
+
+
+def test_existing_autobuild_command_is_never_overwritten(tmp_path):
+    home = tmp_path / "home"
+    existing = home / ".local/bin/autobuild"
+    existing.parent.mkdir(parents=True)
+    existing.write_text("#!/bin/sh\necho someone else's autobuild\n")
+    apply = subprocess.run([sys.executable, str(ROOT / "scripts/setup/install.py"), "--home", str(home), "--apply"],
+                           capture_output=True, text=True)
+    assert apply.returncode == 1 and f"CONFLICT  {existing}" in apply.stdout
+    assert existing.read_text() == "#!/bin/sh\necho someone else's autobuild\n" and not existing.is_symlink()
 
 
 def setup(home, providers):

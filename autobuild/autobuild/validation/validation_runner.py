@@ -238,9 +238,12 @@ def run_validation(*, run_id: str, commands: Sequence[dict[str, Any]], project_r
     try:
         _materialize_snapshot(worktree, snapshot_tree, workspace)
         bindings = []
+        # Runtime paths (ignored dependency trees such as .venv) come from the project checkout, the
+        # same place preflight checks: a fresh run worktree never contains them, and the implementer
+        # cannot write the project checkout. They are mounted read-only into the snapshot copy.
         for relative in (config or {}).get("validation", {}).get("runtime_paths", []):
-            source, destination = worktree / relative, workspace / relative
-            if not is_within(source, worktree) or source.is_symlink() or not source.exists():
+            source, destination = project_root / relative, workspace / relative
+            if not is_within(source, project_root) or source.is_symlink() or not source.exists():
                 raise ValueError("validation runtime_path missing or unsafe: " + relative)
             if destination.exists() or destination.is_symlink():
                 raise ValueError("validation runtime_path overlaps snapshot content: " + relative)

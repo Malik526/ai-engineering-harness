@@ -32,7 +32,7 @@ files through symlinks. Nothing here belongs to a single application.
 ```text
 policies/global/      global policies, linked to ~/.agents/<NAME>.md
 skills/custom/        custom skills (implementation-planning)
-autobuild/            autobuild framework, linked to ~/.agents/autobuild
+autobuild/            autobuild framework, linked to ~/.agents/autobuild; CLI linked as ~/.local/bin/autobuild
 scripts/setup/        links.manifest + install.py (check / apply / adopt links),
                       runtime_guards.py (merge owned runtime fragments),
                       audit_instructions.py (verify the policy → adapter chain and commit guards)
@@ -46,7 +46,9 @@ CHANGELOG.md
 ```
 
 Start with `docs/ARCHITECTURE.md`. To install on a machine, see
-`docs/INSTALLATION.md`.
+`docs/INSTALLATION.md`. Installation also puts the `autobuild` command on
+`~/.local/bin`. To use Autobuild in a project, see
+[autobuild/README.md](autobuild/README.md).
 
 ## Manual completion
 

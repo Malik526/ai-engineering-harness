@@ -2,6 +2,41 @@
 
 ## 2026-10-05
 
+### Setup - `autobuild` Command on PATH and Validation Portability Fixes
+
+- `install.py --apply` now links `~/.local/bin/autobuild` to the harness's
+  `autobuild/bin/autobuild`, as a new `links.manifest` entry. The behavior is
+  unchanged otherwise:
+  - idempotent;
+  - an existing different file is reported `CONFLICT` and left alone;
+  - provider-independent.
+
+  Setup reports whether `~/.local/bin` is on `PATH` and never edits shell
+  files. Installed here; `which autobuild` → `~/.local/bin/autobuild` → harness.
+- Fixed `validation.runtime_paths`, which had never worked since 0.5:
+  - the runner looked for the paths in the fresh run worktree, which never
+    holds git-ignored dependency trees, while preflight and the docs used the
+    project checkout;
+  - the read-only mount was then hidden by the later writable workspace bind.
+
+  Paths now come from the project checkout (which the implementer cannot
+  write) and mount read-only after the workspace bind. A native test covers
+  both.
+- Mounted `/etc/alternatives` read-only in the minimal validation root.
+  System binaries whose libraries resolve through it (ffmpeg via BLAS/LAPACK)
+  failed to load. It holds only symlinks to system files; a native test covers
+  it.
+- Rewrote the Autobuild README as the project-setup entry point:
+  - one-time machine setup and verification, project layout, adopting an
+    existing repository;
+  - first validation, the run/stop/resume/evidence workflow;
+  - a concise safety summary and troubleshooting.
+
+  Also updated INSTALLATION, the harness README and `VALIDATION_CONFINEMENT.md`.
+- Repaired Content Automation's `.autobuild/config.yaml` in that repository
+  (its own changelog has the details). Its five validation commands pass
+  through the confined runner.
+
 ### Autobuild - Responsibility-Based Package and Docs Layout
 
 - Moved the flat `autobuild/autobuild/` package (60 modules) into responsibility

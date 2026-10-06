@@ -14,8 +14,12 @@ Use `command: [argv...]`. Legacy `run: "shell string"` remains supported through
 Each command may set repository-relative `cwd`, integer `timeout_seconds`,
 `required`, changed-file `paths`, explicit string `env`, and `network` (`none`
 default, `host` opt-in). Reserved PATH/HOME/TMP/XDG/proxy/loader/controller keys
-are rejected. Config may name ignored `validation.runtime_paths`; preflight
-requires real non-symlink paths inside the project and mounts them read-only.
+are rejected. Config may name ignored `validation.runtime_paths` (for example a
+project `.venv`). They are taken from the project checkout, never the run
+worktree, which the implementer can write and which never contains ignored
+dependency trees. Preflight and the runner both require real non-symlink paths
+inside the project. Each is mounted read-only at the same relative path inside
+the writable snapshot copy.
 
 ## Source And Filesystem
 

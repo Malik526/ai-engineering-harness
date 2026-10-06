@@ -64,7 +64,9 @@ def sandbox_command(policy: SandboxPolicy, argv: Sequence[str]) -> list[str]:
                     "--dir", "/home", "--dir", "/root", "--dir", "/etc", "--ro-bind", "/usr", "/usr"]
         for link, target in (("/bin", "usr/bin"), ("/lib", "usr/lib"), ("/lib64", "usr/lib64")):
             command += ["--symlink", target, link]
-        for path in (Path("/etc/ld.so.cache"), Path("/etc/ssl"), Path("/etc/localtime")):
+        # /etc/alternatives: Debian-style symlinks into /usr that system libraries (e.g. BLAS for ffmpeg)
+        # resolve through; without it such binaries fail to load. It holds only symlinks to system files.
+        for path in (Path("/etc/ld.so.cache"), Path("/etc/ssl"), Path("/etc/localtime"), Path("/etc/alternatives")):
             if path.exists():
                 command += ["--ro-bind", str(path), str(path)]
         if policy.network == "host":
@@ -80,11 +82,13 @@ def sandbox_command(policy: SandboxPolicy, argv: Sequence[str]) -> list[str]:
     assets.update(path.resolve() for path in policy.read_only_paths)
     for path in sorted(assets, key=lambda value: (len(value.parts), str(value))):
         command += ["--ro-bind", str(path), str(path)]
-    for source, destination in policy.read_only_bindings:
-        command += ["--ro-bind", str(source.resolve()), str(destination.resolve())]
     writable = {policy.writable_root.resolve(), *(path.resolve() for path in policy.writable_paths)}
     for path in sorted(writable, key=lambda value: (len(value.parts), str(value))):
         command += ["--bind", str(path), str(path)]
+    # After the writable binds: these mount read-only *inside* the writable workspace, and a later
+    # parent bind would hide them.
+    for source, destination in policy.read_only_bindings:
+        command += ["--ro-bind", str(source.resolve()), str(destination.resolve())]
     if not policy.host_root_readonly:
         # Seal the minimal root after every mountpoint exists: only the private /tmp
         # tmpfs and the explicit writable binds above accept writes.
