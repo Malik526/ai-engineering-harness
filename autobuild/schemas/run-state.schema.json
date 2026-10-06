@@ -101,7 +101,50 @@
           "resume_session_id": { "type": ["string", "null"] },
           "artifact_directory": { "type": "string", "minLength": 1 },
           "started_at": { "$ref": "#/$defs/timestamp" },
-          "ended_at": { "oneOf": [{ "$ref": "#/$defs/timestamp" }, { "type": "null" }] }
+          "ended_at": { "oneOf": [{ "$ref": "#/$defs/timestamp" }, { "type": "null" }] },
+          "provider": { "$ref": "#/$defs/provider_id" },
+          "mode": {
+            "description": "initial = first attempt; resume = the same provider session continued; rollover = a new session took over through a verified handoff.",
+            "enum": ["initial", "resume", "rollover"]
+          },
+          "failure": {
+            "description": "Classified provider/session failure of this attempt, when it did not succeed.",
+            "type": ["object", "null"], "additionalProperties": false, "required": ["kind", "detail"],
+            "properties": { "kind": { "type": "string", "minLength": 1 }, "detail": { "type": "string" } }
+          }
+        }
+      }
+    },
+    "rollover_history": {
+      "description": "Every implementer rollover decision, executed or not, with its hashed handoff package.",
+      "type": "array", "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["index", "role", "failure", "failed_attempt", "from_provider", "from_session_id", "to_provider",
+                     "approval", "status", "reason", "handoff_artifact", "handoff_sha256", "snapshot_tree",
+                     "head_commit", "replacement_attempt", "at"],
+        "properties": {
+          "index": { "type": "integer", "minimum": 1 },
+          "role": { "const": "implementer" },
+          "failure": {
+            "type": "object", "additionalProperties": false, "required": ["kind", "detail"],
+            "properties": { "kind": { "type": "string", "minLength": 1 }, "detail": { "type": "string" } }
+          },
+          "failed_attempt": { "type": "integer", "minimum": 1 },
+          "from_provider": { "$ref": "#/$defs/provider_id" },
+          "from_session_id": { "type": ["string", "null"] },
+          "to_provider": { "oneOf": [{ "$ref": "#/$defs/provider_id" }, { "type": "null" }] },
+          "approval": { "enum": ["automatic", "human"] },
+          "status": {
+            "description": "prepared = waiting for human approval (resume); executed = the replacement took over; blocked = not allowed, the run stopped for a human.",
+            "enum": ["prepared", "executed", "blocked"]
+          },
+          "reason": { "type": "string", "minLength": 1 },
+          "handoff_artifact": { "type": "string", "minLength": 1 },
+          "handoff_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "snapshot_tree": { "type": "string", "minLength": 1 },
+          "head_commit": { "type": "string", "minLength": 1 },
+          "replacement_attempt": { "type": ["integer", "null"], "minimum": 1 },
+          "at": { "$ref": "#/$defs/timestamp" }
         }
       }
     },

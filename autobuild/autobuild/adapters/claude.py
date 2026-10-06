@@ -7,6 +7,10 @@ Confinement (Claude Code's own sandbox needs bubblewrap, which may be absent):
   and git commands outside the allowlist;
 - web tools disabled.
 The controller's git shim on PATH and protected-ref verification apply as well.
+
+Structured output: the canonical report schema is projected by claude_schema.py
+(Claude's API rejects top-level combinators) and the answer is validated against
+the unchanged canonical schema. Failure kinds come from Claude's own error text.
 """
 
 import json
@@ -17,12 +21,25 @@ from typing import Optional
 
 from autobuild.agent_provider import AgentRequest
 from autobuild.paths import CORE_ROOT
-from autobuild.structured_output import parse_report, strict_schema, validate_report
+from autobuild.adapters.claude_schema import input_schema
+from autobuild.provider_failures import (PROVIDER_HARD_LIMIT, PROVIDER_UNAVAILABLE, QUOTA_EXHAUSTED, SCHEMA_REJECTED,
+                                         SESSION_EXHAUSTED, SESSION_UNAVAILABLE, TRANSIENT)
+from autobuild.structured_output import parse_report, validate_report
 from autobuild.subprocess_adapter import SubprocessAdapter
 
 _ALLOWED_TOOLS = "Bash,Read,Edit,MultiEdit,Write,Glob,Grep,TodoWrite,NotebookEdit"
 _DISALLOWED_TOOLS = "WebFetch,WebSearch"
 _HOOK_MATCHER = "Bash|Edit|MultiEdit|Write|NotebookEdit"
+# Ordered: the most specific match wins. Matched only against provider error text.
+_FAILURE_PATTERNS = [
+    (SCHEMA_REJECTED, r"API Error: 400\b.*(input_schema|json[_ ]schema|output_format)"),
+    (SESSION_UNAVAILABLE, r"No conversation found with session ID|session .{0,80} (not found|does not exist)"),
+    (SESSION_EXHAUSTED, r"prompt is too long|context (window|length) (exceeded|limit)|conversation is too long"),
+    (QUOTA_EXHAUSTED, r"usage limit|hit your (usage )?limit|(5-hour|weekly|session|opus|usage) limit (reached|exceeded)"),
+    (PROVIDER_HARD_LIMIT, r"credit balance is too low|out of extra usage|billing"),
+    (PROVIDER_UNAVAILABLE, r"API Error: 40[13]\b|invalid api key|please run /login|not logged in|authentication_error"),
+    (TRANSIENT, r"API Error: (429|5\d\d)\b|overloaded|rate.?limit|ECONNRESET|socket hang up|fetch failed|network error"),
+]
 
 
 def hook_command() -> str:
@@ -40,7 +57,7 @@ class ClaudeAdapter(SubprocessAdapter):
         command = [
             self.assignment.command, "-p",
             "--output-format", "json",
-            "--json-schema", json.dumps(strict_schema(request.report_schema)),
+            "--json-schema", json.dumps(input_schema(request.report_schema)),
             "--permission-mode", "default" if reviewer else "acceptEdits",
             "--permission-prompts", "none",
             "--allowedTools", "Read,Glob,Grep" if reviewer else _ALLOWED_TOOLS,
@@ -70,6 +87,20 @@ class ClaudeAdapter(SubprocessAdapter):
         else:
             report, error = parse_report(envelope.get("result"), request.report_schema)
         return session_id, report, error
+
+
+    def failure_patterns(self) -> list[tuple[str, str]]:
+        return _FAILURE_PATTERNS
+
+    def provider_error_text(self, request: AgentRequest, exit_code: Optional[int]) -> str:
+        parts = []
+        envelope = _last_json_object(self._stdout_file(request))
+        if envelope is not None and (envelope.get("is_error") or envelope.get("subtype", "success") != "success"):
+            status = envelope.get("api_error_status")
+            parts.append((f"API Error: {status} " if status and "API Error" not in str(envelope.get("result")) else "")
+                         + str(envelope.get("result", "")))
+        parts.append(super().provider_error_text(request, exit_code))
+        return "\n".join(part for part in parts if part)
 
 
 def _last_json_object(path: Path) -> Optional[dict]:

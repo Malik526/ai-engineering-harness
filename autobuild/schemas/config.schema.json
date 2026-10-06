@@ -27,6 +27,25 @@
         "reviewer": { "$ref": "#/$defs/role_assignment" }
       }
     },
+    "rollover": {
+      "description": "Optional bounded implementer rollover. Absent means disabled: a provider/session failure stops the run for a human. Never a silent fallback.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_rollovers", "approval", "implementer"],
+      "properties": {
+        "max_rollovers": { "description": "Rollovers allowed per run. 0.6 caps this at 1.", "type": "integer", "minimum": 0, "maximum": 1 },
+        "approval": { "description": "automatic: the controller takes over immediately. human: it prepares the handoff and stops HUMAN_BLOCKED until `autobuild resume`.", "enum": ["automatic", "human"] },
+        "implementer": {
+          "description": "Ordered replacement implementers. The configured implementer may appear only for session-scoped failures.",
+          "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/provider_id" }
+        },
+        "on": {
+          "description": "Failure kinds that may trigger rollover; defaults to every eligible kind.",
+          "type": "array", "minItems": 1, "uniqueItems": true,
+          "items": { "enum": ["quota_exhausted", "provider_hard_limit", "provider_unavailable", "session_unavailable", "session_exhausted"] }
+        }
+      }
+    },
     "providers": {
       "description": "Optional per-provider overrides, keyed by registry id.",
       "type": "object",

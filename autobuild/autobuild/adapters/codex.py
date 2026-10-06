@@ -3,6 +3,8 @@
 The sandbox confines file writes to the worktree (plus temp dirs) and blocks
 network access, so the agent cannot write the main repository's refs or push.
 The controller's git shim on PATH and protected-ref verification apply as well.
+Failure kinds come from Codex's own top-level error events and stderr, never
+from the agent's messages.
 """
 
 import json
@@ -12,9 +14,23 @@ from typing import Optional
 from autobuild.agent_provider import AgentRequest
 from autobuild.structured_output import parse_report, validate_report
 from autobuild.adapters.codex_schema import output_schema, omit_optional_nulls
+from autobuild.provider_failures import (PROVIDER_HARD_LIMIT, PROVIDER_UNAVAILABLE, QUOTA_EXHAUSTED, SCHEMA_REJECTED,
+                                         SESSION_EXHAUSTED, SESSION_UNAVAILABLE, TRANSIENT)
 from autobuild.subprocess_adapter import SubprocessAdapter
 
 _SESSION_KEYS = ("thread_id", "session_id", "conversation_id")
+# Ordered: the most specific match wins. Observed with Codex CLI 0.160.0:
+# usage limit -> `error`/`turn.failed` events; unknown resume id -> stderr
+# "thread/resume failed: no rollout found for thread id".
+_FAILURE_PATTERNS = [
+    (SCHEMA_REJECTED, r"invalid_json_schema|invalid schema for response_format|output.?schema.{0,40}invalid"),
+    (SESSION_UNAVAILABLE, r"no rollout found for thread id|thread/resume failed|thread .{0,80} not found"),
+    (SESSION_EXHAUSTED, r"context_length_exceeded|context window|exceeds the context"),
+    (QUOTA_EXHAUSTED, r"hit your usage limit|usage limit|insufficient_quota|quota exceeded|purchase more credits"),
+    (PROVIDER_HARD_LIMIT, r"billing_hard_limit|account (is )?(suspended|deactivated)"),
+    (PROVIDER_UNAVAILABLE, r"\b401\b|unauthorized|not logged in|please (log|sign) ?in|invalid_api_key"),
+    (TRANSIENT, r"\b429\b|rate.?limit|stream disconnected|\b5\d\d\b|overloaded|connection (reset|refused)|timed? ?out"),
+]
 
 
 class CodexAdapter(SubprocessAdapter):
@@ -44,6 +60,9 @@ class CodexAdapter(SubprocessAdapter):
         session_id, error_event = _scan_events(stdout_file)
         last_message = self._last_message_file(request)
         text = last_message.read_text(errors="replace") if last_message.exists() else None
+        if not text or not text.strip():
+            error = "agent produced no final message" + (f"; provider error: {error_event}" if error_event else "")
+            return session_id, None, error
         try:
             value = json.loads(text) if text else None
         except json.JSONDecodeError:
@@ -54,9 +73,35 @@ class CodexAdapter(SubprocessAdapter):
             error = f"{error}; provider error: {error_event}"
         return session_id, report, error
 
+    def failure_patterns(self) -> list[tuple[str, str]]:
+        return _FAILURE_PATTERNS
+
+    def provider_error_text(self, request: AgentRequest, exit_code: Optional[int]) -> str:
+        events = _error_events(self._stdout_file(request))
+        return "\n".join(events + [super().provider_error_text(request, exit_code)]).strip()
+
     @staticmethod
     def _last_message_file(request: AgentRequest) -> Path:
         return request.output_directory / "codex-last-message.txt"
+
+
+def _error_events(path: Path) -> list[str]:
+    """Messages of top-level error/turn.failed events (item-level config warnings are not failures)."""
+    if not path.exists():
+        return []
+    messages = []
+    for line in path.read_text(errors="replace").splitlines():
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(event, dict) and event.get("type") in ("error", "turn.failed"):
+            detail = event.get("message") or event.get("error")
+            if isinstance(detail, dict):
+                detail = detail.get("message") or json.dumps(detail)
+            if detail:
+                messages.append(str(detail))
+    return messages
 
 
 def _scan_events(path: Path) -> tuple[Optional[str], Optional[str]]:

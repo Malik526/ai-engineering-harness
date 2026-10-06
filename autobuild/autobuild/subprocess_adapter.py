@@ -15,6 +15,8 @@ from pathlib import Path
 from typing import IO, Any, Optional
 
 from autobuild.agent_provider import AgentRequest, AgentResult, ProviderHealth
+from autobuild.provider_failures import (INTERRUPTED, INVALID_OUTPUT, TIMEOUT, UNKNOWN, ProviderFailure,
+                                         match_failure)
 from autobuild.provider_registry import RoleAssignment
 
 _HEALTH_TIMEOUT_SECONDS = 30
@@ -44,6 +46,34 @@ class SubprocessAdapter:
     def parse_output(self, request: AgentRequest, stdout_file: Path) -> tuple[Optional[str], Optional[dict], Optional[str]]:
         """Return (session_id, structured_output, output_error) from the finished process's output."""
         raise NotImplementedError
+
+    def failure_patterns(self) -> list[tuple[str, str]]:
+        """Ordered (failure kind, regex) pairs for this CLI's own error messages."""
+        return []
+
+    def provider_error_text(self, request: AgentRequest, exit_code: Optional[int]) -> str:
+        """Error text emitted by the provider itself (never the agent's answer). Default: stderr of a failed process."""
+        stderr = self._stderr_file(request)
+        if exit_code in (0, None) or not stderr.exists():
+            return ""
+        return stderr.read_text(errors="replace")[-20000:]
+
+    def classify_failure(self, request: AgentRequest, *, exit_code: Optional[int], timed_out: bool,
+                         terminated: bool, structured: Optional[dict]) -> Optional[ProviderFailure]:
+        """None on success; otherwise the most specific failure kind the evidence supports."""
+        if timed_out:
+            return ProviderFailure(TIMEOUT, f"exceeded {request.timeout_seconds}s")
+        if terminated:
+            return ProviderFailure(INTERRUPTED, "terminated by the controller")
+        text = self.provider_error_text(request, exit_code)
+        if exit_code == 0 and structured is not None and not text:
+            return None
+        matched = match_failure(text, self.failure_patterns()) if text else None
+        if matched:
+            return matched
+        if exit_code == 0 and not text:
+            return ProviderFailure(INVALID_OUTPUT, "the agent's final answer did not satisfy its report schema")
+        return ProviderFailure(UNKNOWN, (text.strip().splitlines() or [f"exit code {exit_code}"])[-1][:500])
 
     # --- AgentProvider ---
 
@@ -101,6 +131,8 @@ class SubprocessAdapter:
         duration = round(time.monotonic() - self._started_at, 3)
         exit_code = self._process.returncode
         session_id, structured, error = self.parse_output(request, self._stdout_file(request))
+        failure = self.classify_failure(request, exit_code=None if self._terminated else exit_code,
+                                        timed_out=timed_out, terminated=self._terminated, structured=structured)
         return AgentResult(
             provider=self.provider_id,
             session_id=session_id or request.session_id,
@@ -112,6 +144,7 @@ class SubprocessAdapter:
             stderr_file=self._stderr_file(request),
             structured_output=structured,
             output_error=error,
+            failure=failure,
         )
 
     def terminate(self) -> None:

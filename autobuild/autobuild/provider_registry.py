@@ -50,17 +50,14 @@ def resolve_assignments(
     config_data: dict[str, Any], registry: Optional[dict[str, Any]] = None
 ) -> dict[str, RoleAssignment]:
     """Map each role to its provider, applying project overrides. Assumes validated config."""
-    providers = (registry or load_registry())["providers"]
-    overrides = config_data.get("providers", {})
-    resolved = {}
-    for role in ROLES:
-        provider = config_data["agents"][role]["provider"]
-        entry, override = providers[provider], overrides.get(provider, {})
-        resolved[role] = RoleAssignment(
-            role=role,
-            provider=provider,
-            display_name=entry["display_name"],
-            command=override.get("command", entry["executable"]),
-            model=override.get("model"),
-        )
-    return resolved
+    return {role: assignment_for(config_data, role, config_data["agents"][role]["provider"], registry)
+            for role in ROLES}
+
+
+def assignment_for(config_data: dict[str, Any], role: str, provider: str,
+                   registry: Optional[dict[str, Any]] = None) -> RoleAssignment:
+    """`provider` in `role` with project overrides applied (also used for configured rollover replacements)."""
+    entry = (registry or load_registry())["providers"][provider]
+    override = config_data.get("providers", {}).get(provider, {})
+    return RoleAssignment(role=role, provider=provider, display_name=entry["display_name"],
+                          command=override.get("command", entry["executable"]), model=override.get("model"))

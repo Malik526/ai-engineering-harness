@@ -41,6 +41,8 @@ Human ⇄ Planner ──(explicit approval)──▶ approved brief (status: rea
                                  │
                                  ▼
                             Implementer ◀──────────────┐
+                                 │  quota/session failure ──▶ handoff ──▶ configured
+                                 │  replacement (new session, max 1) or HUMAN_BLOCKED
                                  │                     │ findings
                                  ▼                     │
               Confined validation + browser gates     │
@@ -52,7 +54,7 @@ Human ⇄ Planner ──(explicit approval)──▶ approved brief (status: rea
                         │
                checkpoint commit on run branch
                         │
-              COMPLETED: stop for human (no rollover)
+              COMPLETED: stop for human (no roadmap rollover)
 ```
 
 Merging into a protected branch always stays outside autobuild.
@@ -110,10 +112,22 @@ Autobuild points at them through `paths` and doesn't copy them.
 | 0.3 | **Implemented.** Independent review, bounded revisions, read-only reviewers, per-cycle evidence and explicit CLI resume. See `RUNNER.md` and `EVALUATION_0_3.md` for verification and live-provider limitations |
 | 0.4 | **Implemented.** Controller-owned browser/E2E gates, isolated services, immutable evidence and hard checkpoint barriers. See `BROWSER_GATES.md`, ADR 0004 and `EVALUATION_0_4.md` |
 | 0.5 | **Implemented.** Normal tests/lint/type checks/builds use the shared fail-closed Bubblewrap layer, exact disposable source snapshots, isolated environment/network policy, and immutable evidence. See `VALIDATION_CONFINEMENT.md`, ADR 0005 and `EVALUATION_0_5.md` |
-| 0.6 | Recommended next: add bounded autonomous rollover now that every deterministic checkpoint gate is controller-confined; retain human approval, stop, spend and branch boundaries |
+| 0.6 | **Implemented.** Reviewer portability (one canonical review contract, per-adapter wire projections; Claude and Codex both review) and bounded implementer provider/session rollover through a verified handoff, with fresh validation, browser evidence and review after takeover. See `PROVIDERS.md`, `RUNNER.md` → Rollover, ADR 0006 and `EVALUATION_0_6.md` |
+| 0.7 | Recommended next: operations for unattended runs (notification provider, remote stop/control, spend limits) so a blocked or rolled-over run reaches the human promptly. Roadmap rollover (starting the next brief) stays deferred until those exist |
 
 Related: `RUNNER.md`, `PROVIDERS.md`, `AUTONOMY_POLICY.md`, `ARTIFACT_CONTRACT.md`, `SAFETY_MODEL.md`,
 `CONTROL_CONTRACT.md`, `NOTIFICATION_CONTRACT.md`, `decisions/`.
+
+## Provider Continuity
+
+Provider identity is configuration, and so is any change of provider during a
+run. An implementer that fails with a classified provider/session failure
+(`provider_failures.py`) leaves a hashed handoff package; `rollover_policy.py`
+allows at most one configured replacement, which starts a new session from the
+worktree, brief and handoff — never from another provider's memory. Its work is
+validated, browser-tested and reviewed afresh. Reviewers are always fresh
+sessions; every reviewer's answer is normalized by `review_contract.py` into
+the same canonical review. See `PROVIDERS.md` and ADR 0006.
 
 ## Shared Validation Confinement
 

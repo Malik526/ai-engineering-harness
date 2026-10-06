@@ -91,6 +91,26 @@ and an exclusive run lock prevents concurrent controllers. Resume never reuses
 old normal/browser evidence for changed source or automatically clears a human
 gate. See ADRs 0003 through 0005.
 
+## Provider Rollover (0.6)
+
+Rollover changes who implements, never what counts as evidence. It is opt-in
+(`rollover` in the project config), capped at one per run, and limited to
+classified provider/session failures; bad code, failing validation, REVISE,
+timeouts, transient errors, schema rejections and unrecognised errors never
+trigger it. The replacement must be listed in the frozen config, support the
+implementer role and pass a health check; a provider-wide failure cannot be
+"replaced" by the same provider. Anything else blocks for a human with the
+work preserved.
+
+Before takeover the controller re-verifies the hashed handoff against the live
+worktree, refs and evidence and fails non-recoverably on any mismatch. The
+replacement runs under the same guards as any implementer (worktree-only
+writes, Git shim, protected-ref checks, no commits). Its output gets fresh
+confined validation, browser gates and a fresh reviewer; earlier evidence
+cannot authorize it, and the checkpoint records `Autobuild-Rollover`. A
+replacement still sees whatever the failed implementer left in the worktree,
+including mistakes, which is why it is told to verify rather than trust it.
+
 ## Normal Validation Execution (0.5)
 
 Normal tests, lint, type checks, builds, setup, and project checks run through the

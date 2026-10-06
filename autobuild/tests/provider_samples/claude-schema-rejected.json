@@ -1,0 +1,1 @@
+{"type": "result", "subtype": "success", "is_error": true, "api_error_status": 400, "terminal_reason": "api_error", "result": "API Error: 400 tools.3.custom.input_schema: input_schema does not support oneOf, allOf, or anyOf at the top level", "session_id": "7b19fa58-cbe1-4c73-9718-5d30b7b68025", "num_turns": 1}

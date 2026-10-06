@@ -19,7 +19,8 @@ from autobuild.front_matter import FrontMatterError, split_front_matter
 from autobuild.git_client import GitClient
 from autobuild.implementations import brief_errors
 from autobuild.provider_loader import ProviderLoadError, load_adapter
-from autobuild.provider_registry import RoleAssignment
+from autobuild.provider_registry import RoleAssignment, assignment_for
+from autobuild.rollover_policy import settings as rollover_settings
 from autobuild.roles import IMPLEMENTER, REVIEWER
 from autobuild.safety import is_protected_branch
 from autobuild.validation_runner import command_unavailable
@@ -58,6 +59,7 @@ class RunPlan:
     reviewer_assignment: Optional[RoleAssignment] = None
     reviewer_timeout: int = DEFAULT_IMPLEMENTER_TIMEOUT
     resume_state: Optional[dict[str, Any]] = None
+    resume_rollover: Optional[dict[str, Any]] = None  # {"action": "execute"|"redecide", "record": rollover record}
 
 
 def completed_from_siblings(brief_path: Path) -> set[str]:
@@ -121,6 +123,16 @@ def preflight(brief_path: Path, project_root: Path, *, base_branch: Optional[str
             issues += [f"Configured reviewer: {reviewer_assignment.provider}", f"Status: unavailable ({reviewer_health.detail})"]
     except ProviderLoadError as exc:
         issues += [f"Configured reviewer: {reviewer_assignment.provider}", f"Status: unavailable ({exc})"]
+
+    # Rollover replacements are checked again at takeover; an unhealthy one now is only a warning.
+    for candidate in rollover_settings(config.data)["implementer"]:
+        try:
+            candidate_health = load_adapter(assignment_for(config.data, IMPLEMENTER, candidate)).health_check()
+            available, detail = candidate_health.available, candidate_health.detail
+        except ProviderLoadError as exc:
+            available, detail = False, str(exc)
+        if not available:
+            warnings.append(f"rollover implementer {candidate} is unavailable now ({detail}); a rollover to it would block")
 
     # 5. Git repository
     git = GitClient(project_root, config.protected_branches)

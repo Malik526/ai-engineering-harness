@@ -54,6 +54,19 @@ Implementation status:
 
 ## Vendor Capability Reuse
 
+### Autobuild 0.6 Provider Continuity Controls (2026-10-05)
+
+Reviewer output from any provider is checked against one canonical review
+schema and normalized by the controller; adapters may only relax the wire
+schema their CLI accepts. Provider/session failures are classified from the
+CLI's own error output; only quota, hard-limit, unavailable-provider and
+lost/exhausted-session kinds can trigger rollover, and unknown output cannot.
+Rollover is opt-in, capped at one per run, restricted to configured
+replacements and allowed transitions, health-checked, and preceded by a hashed
+handoff that is re-verified against the live worktree, refs and evidence. The
+replacement's work receives fresh confined validation, browser gates and a
+fresh reviewer. See ADR 0006 and `autobuild/docs/EVALUATION_0_6.md`.
+
 ### Autobuild 0.5 Validation Controls (2026-10-04)
 
 Every deterministic validation result that can authorize a checkpoint now runs
@@ -131,6 +144,10 @@ ignored-file/process side effects remain gaps, not claims of full confinement.
   commit mechanisms and launch overrides are documented in `RUNTIME_GUARDS.md`.
   Completion formatting has a vendor reminder and measured results, but no
   deterministic final-message gate.
+
+- Failure classification relies on each CLI's error text. A changed message
+  becomes `unknown`, which fails safe (stop for a human) but loses rollover.
+  Refresh `tests/provider_samples/` when CLIs change.
 
 ## Manual Completion Backing (2026-10-04)
 

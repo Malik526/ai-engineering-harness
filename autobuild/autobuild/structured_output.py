@@ -32,8 +32,3 @@ def validate_report(report: Any, schema: Mapping[str, Any]) -> tuple[Optional[di
         location = "/".join(str(p) for p in first.absolute_path) or "<root>"
         return None, f"report does not match schema at {location}: {first.message}"
     return report, None
-
-
-def strict_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
-    """Copy of `schema` without top-level annotation keys that strict structured-output APIs reject."""
-    return {k: v for k, v in schema.items() if k not in ("$schema", "$id", "title", "description")}

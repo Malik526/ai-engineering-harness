@@ -12,7 +12,12 @@ from autobuild.front_matter import split_front_matter
 from autobuild.implementations import brief_errors
 from autobuild.git_client import GitClient, GitError
 from autobuild.preflight import PreflightError, RunPlan, completed_from_siblings
+from autobuild.browser_contract import digest, safe_file
+from autobuild.handoff import handoff_errors
+from autobuild.provider_failures import ProviderFailure
 from autobuild.provider_loader import load_adapter, ProviderLoadError
+from autobuild.provider_registry import assignment_for
+from autobuild.rollover_policy import decide as decide_rollover, settings as rollover_settings
 from autobuild.roles import IMPLEMENTER, REVIEWER
 from autobuild.run_state_checks import run_state_errors
 from autobuild.schemas import schema_errors
@@ -100,10 +105,13 @@ def resume_preflight(run: Path, project_root: Path) -> RunPlan:
         if git.operation_in_progress():
             issues.append("Git operation in progress in the project")
         assignments = config.agents
-        adapter = load_adapter(assignments[IMPLEMENTER])
+        active, rollover_action, rollover_issues = _rollover_resume(directory, state, config.data, git, attempts)
+        issues.extend(rollover_issues)
+        implementer = assignment_for(config.data, IMPLEMENTER, active)
+        adapter = load_adapter(implementer)
         health = adapter.health_check()
-        if not health.available:
-            issues.append(f"configured implementer unavailable: {health.detail}")
+        if not health.available and rollover_action is None:
+            issues.append(f"active implementer {active} unavailable: {health.detail}")
         reviewer_health = load_adapter(assignments[REVIEWER]).health_check()
         if not reviewer_health.available:
             issues.append(f"configured reviewer unavailable: {reviewer_health.detail}")
@@ -146,15 +154,65 @@ def resume_preflight(run: Path, project_root: Path) -> RunPlan:
         if issues:
             raise PreflightError(issues)
         return RunPlan(config=config, project_root=root, brief_path=frozen, meta=meta, body=body,
-                       gate=gate, assignment=assignments[IMPLEMENTER], adapter=adapter, health=health,
+                       gate=gate, assignment=implementer, adapter=adapter, health=health,
                        base_branch=state["parent_branch"], base_commit=state["base_commit"], branch=state["branch"],
                        run_id=state["run_id"], run_dir=directory, worktree=worktree, validation_commands=commands,
                        implementer_timeout=config.data["limits"].get("implementer_timeout_seconds", 3600),
                        checkpoint_commits=bool(config.data["git"].get("checkpoint_commits", False)),
                        browser_gate=bool(meta["validation"]["browser_required"]),
                        reviewer_assignment=assignments[REVIEWER],
-                       reviewer_timeout=config.data["limits"].get("reviewer_timeout_seconds", 3600), resume_state=state)
+                       reviewer_timeout=config.data["limits"].get("reviewer_timeout_seconds", 3600), resume_state=state,
+                       resume_rollover=rollover_action)
     except PreflightError:
         raise
     except (OSError, ValueError, KeyError, TypeError, GitError, ProviderLoadError) as exc:
         raise PreflightError([f"resume: {exc}"]) from exc
+
+
+def _health(config_data):
+    def check(provider: str) -> tuple[bool, str]:
+        try:
+            health = load_adapter(assignment_for(config_data, IMPLEMENTER, provider)).health_check()
+        except (ProviderLoadError, KeyError) as exc:
+            return False, str(exc)
+        return health.available, health.detail
+    return check
+
+
+def _rollover_resume(directory: Path, state: dict, config_data: dict, git: GitClient,
+                     attempts: list) -> tuple[str, dict | None, list[str]]:
+    """(active implementer, rollover action or None for same-session resume, integrity issues)."""
+    issues, history = [], state.get("rollover_history", [])
+    primary = config_data["agents"][IMPLEMENTER]["provider"]
+    executed_to = {r["to_provider"] for r in history if r["status"] == "executed"}
+    implementers = [s for s in state["agent_sessions"] if s["role"] == IMPLEMENTER]
+    active = implementers[-1]["provider"] if implementers else primary
+    if active != primary and active not in executed_to:
+        issues.append(f"active implementer {active} was never reached through an executed rollover")
+    if [r["index"] for r in history] != list(range(1, len(history) + 1)):
+        issues.append("rollover history indexes are inconsistent")
+    for record in history:
+        path = directory / record["handoff_artifact"]
+        if not safe_file(path, directory) or digest(path) != record["handoff_sha256"]:
+            issues.append(f"rollover handoff {record['index']} is missing or modified")
+        if record["status"] == "executed" and (record["replacement_attempt"] is None
+                                               or record["replacement_attempt"] > len(attempts)):
+            issues.append(f"executed rollover {record['index']} has no replacement attempt")
+    if issues or not history:
+        return active, None, issues
+    latest = history[-1]
+    if latest["failed_attempt"] != len(attempts) or latest["status"] == "executed":
+        return active, None, issues  # superseded: a later attempt exists
+    if latest["status"] == "prepared":
+        problems = handoff_errors(run_dir=directory, state=state, record=latest, config_data=config_data, git=git,
+                                  protected_now=git.protected_refs())
+        available, detail = _health(config_data)(latest["to_provider"]) if latest["to_provider"] else (False, "none")
+        if not available:
+            problems.append(f"replacement {latest['to_provider']} unavailable: {detail}")
+        return active, {"action": "execute", "record": latest}, ["rollover: " + p for p in problems]
+    executed = sum(1 for r in history if r["status"] == "executed")
+    decision = decide_rollover(config_data, ProviderFailure(latest["failure"]["kind"], latest["failure"]["detail"]),
+                               latest["from_provider"], executed, _health(config_data))
+    if decision.allowed and rollover_settings(config_data)["max_rollovers"] > executed:
+        return active, {"action": "redecide", "record": latest}, issues
+    return active, None, issues  # still not allowed: an explicit resume continues the same session

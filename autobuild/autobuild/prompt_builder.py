@@ -6,6 +6,7 @@ completion output. It deliberately carries no prior agent conversation.
 """
 
 import re
+import shlex
 from pathlib import Path
 from string import Template
 from typing import Any, Sequence
@@ -24,7 +25,8 @@ def _validation_lines(commands: Sequence[dict[str, Any]]) -> str:
         where = f" (in `{spec['cwd']}`)" if spec.get("cwd") else ""
         scope = f"; only when files matching {', '.join(spec['paths'])} change" if spec.get("paths") else ""
         display = spec.get("display") or spec.get("command") or spec.get("run")
-        rendered = " ".join(display) if isinstance(display, list) else display
+        # Quote argv exactly as a shell would need it, so `grep -qx "a b" f` is not shown as `grep -qx a b f`.
+        rendered = shlex.join(display) if isinstance(display, list) else display
         lines.append(f"- {spec['name']} [{spec['kind']}]: `{rendered}`{where}{scope}")
     return "\n".join(lines)
 

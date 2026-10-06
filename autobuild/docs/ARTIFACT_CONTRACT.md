@@ -34,6 +34,8 @@ the review.
 | `browser/cycle-NN/results.json` | authoritative_evidence | controller | Immutable gate results, snapshot identity and hashed file manifest |
 | `browser/cycle-NN/<gate-id>/evidence.json` | authoritative_evidence | controller | Gate argv, environment hash, outcome, timing and bounded summaries |
 | `browser/cycle-NN/<gate-id>/` | authoritative_evidence | controller | Raw command/service logs and confined artifacts/ screenshots, traces, videos or reports |
+| `rollover/rollover-NN/handoff.json` | authoritative_evidence | controller | Rollover handoff: run/cycle/source identity, classified failure, providers, budget and hashes of every inherited artifact |
+| `rollover/rollover-NN/` | authoritative_evidence | controller | Worktree snapshot frozen at the handoff (git.json, diff.patch, changed-files.txt) |
 | `review/review-NN.json` | decision_record | reviewer | Structured review result (review.schema.json) |
 | `review/review-NN.md` | supplemental | reviewer | Reviewer's narrative for the same cycle |
 | `review/review-NN-prompt.md` | authoritative_evidence | controller | Exact evidence-first reviewer input |
@@ -61,7 +63,7 @@ comparison snapshots; `.controller.lock` prevents concurrent controllers.
 - **Diffs come from git.** `diff.patch`, `changed-files.txt` and `git.json` are produced by the controller from a snapshot of the worktree (taken through a temporary index, before validation runs), never written by an agent. The checkpoint commit is built from exactly that snapshot's tree.
 - **The prompt is recorded.** `implementation/prompt.md` is the exact input the implementer received, so a reviewer can tell an implementation error from an instruction error.
 - **Review status is structured.** Only a schema-valid `review-NN.json` moves the state machine. PASS cannot carry blocker/major findings; REVISE requires findings; BLOCK requires `blocked_reason`. Legacy BLOCKED is accepted and normalized to BLOCK. The runner requires brief, git_diff, changed_files and validation_output evidence, matching run/implementation/cycle and unique finding IDs. Actual provider/session/time come from the controller, not agent claims.
-- **State retains history.** `review_cycle`, `agent_sessions`, `review_history`, `revision_history`, `validation_history`, `browser_history`, `final_review_status` and `protected_refs` record observed identities, outcomes, snapshot trees, artifact pointers, hashes and resumption IDs. Invalid writes are rejected transactionally. No final checkpoint occurs before reviewer PASS plus required validation PASS.
+- **State retains history.** `review_cycle`, `agent_sessions`, `review_history`, `revision_history` (with each attempt's provider, `mode` initial/resume/rollover and classified failure), `validation_history`, `browser_history`, `rollover_history`, `final_review_status` and `protected_refs` record observed identities, outcomes, snapshot trees, artifact pointers, hashes and resumption IDs. Invalid writes are rejected transactionally. No final checkpoint occurs before reviewer PASS plus required validation PASS.
 - **Runs are local.** `runs/` is git-ignored in projects. Logs may contain environment details and shouldn't be committed.
 
 ## Browser Evidence (0.4)
@@ -95,3 +97,24 @@ artifact they saw. The controller verifies the manifest, frozen validation
 policy, matching per-attempt Git evidence, aggregate status, and history before
 review, resumed implementation, and checkpoint. Historical attempts remain
 immutable; only a fresh artifact for the current source can authorize checkpoint.
+
+## Rollover Handoff (0.6)
+
+When an implementer fails with a rollover-eligible kind, the controller writes
+`rollover/rollover-NN/handoff.json` before deciding anything else, whether or
+not a rollover then happens. It records run and implementation id, review cycle,
+failed attempt, classified failure, original provider/session, replacement (or
+none), approval mode, decision and reason, rollover count and budget, worktree,
+branch, base/HEAD commits, the frozen snapshot tree and changed paths, protected
+refs, and path + SHA-256 for the frozen brief, frozen config, the handoff's own
+`git.json`/`diff.patch`/`changed-files.txt`, the failed attempt's result, and
+every validation, browser and review artifact so far. `state.rollover_history`
+anchors the package by hash.
+
+Before a replacement starts, `handoff.py` re-verifies all of it against the live
+repository: package and every referenced hash, worktree branch/HEAD and a fresh
+snapshot equal to the frozen one, protected refs, budget and an allowed
+transition. Any mismatch fails `rollover_handoff_invalid`. The handoff is
+context for the new session, not validation truth: the replacement's result
+gets fresh validation, browser evidence and review, and no earlier evidence can
+authorize it. `autobuild evidence` verifies every handoff hash.

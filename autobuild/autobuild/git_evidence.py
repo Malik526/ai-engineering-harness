@@ -37,9 +37,9 @@ class GitEvidence:
         return self.head_commit != self.base_commit
 
 
-def capture(git: GitClient, worktree: Path, run_dir: Path, base_commit: str) -> GitEvidence:
-    """Snapshot the worktree and write implementation/{git.json,changed-files.txt,diff.patch}."""
-    out = run_dir / "implementation"
+def capture(git: GitClient, worktree: Path, run_dir: Path, base_commit: str, out: Path | None = None) -> GitEvidence:
+    """Snapshot the worktree and write {git.json,changed-files.txt,diff.patch} to `out` (default run_dir/implementation)."""
+    out = out or run_dir / "implementation"
     out.mkdir(parents=True, exist_ok=True)
     index_file = out / ".snapshot-index"
     env = {"GIT_INDEX_FILE": str(index_file)}

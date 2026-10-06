@@ -1,4 +1,4 @@
-# Confined Validation And Independent Review Runner (Phase 0.5)
+# Confined Validation, Independent Review And Rollover Runner (Phase 0.6)
 
 `autobuild run` takes one approved brief through implementation and review and stops
 for the human:
@@ -8,12 +8,15 @@ brief → preflight → branch + worktree → configured implementer → git evi
       → normal validation → browser gates → fresh reviewer → PASS + gates PASS → checkpoint → STOP
                                 REVISE → resume implementer → revalidate → fresh reviewer
                                 BLOCK / cycle limit → HUMAN_BLOCKED
+implementer quota/session failure → handoff → configured replacement (new session, max 1)
+                                  → fresh validation + browser gates → fresh reviewer
 ```
 
 The bounded review loop is implemented. Fixable validation failures can drive a
 reviewer REVISE cycle; infrastructure ERROR and reviewer PASS over required
-non-PASS evidence stop for a human. There is no roadmap rollover, merge, push,
-or deployment.
+non-PASS evidence stop for a human. Bounded *provider* rollover (below) can hand
+a failed implementer's work to one configured replacement. There is no roadmap
+rollover (starting the next brief), merge, push, or deployment.
 
 ## Usage
 
@@ -145,7 +148,8 @@ controller commits only when all of these hold:
 
 The commit contains the pre-validation snapshot tree, with message
 `autobuild(<id>): <title>` and `Autobuild-Run` / `Autobuild-Implementer`
-trailers. Browser/review human gates occur before the checkpoint. Outside
+trailers (the active implementer), plus one `Autobuild-Rollover: <from> -> <to>
+(<kind>)` per executed rollover. Browser/review human gates occur before the checkpoint. Outside
 Autobuild, manual development never commits automatically
 (global `GIT.md`).
 
@@ -155,12 +159,15 @@ Autobuild, manual development never commits automatically
 | --- | --- |
 | `COMPLETED` | Controller validation and independent review passed; checkpointed if eligible. Human owns merge |
 | `FAILED` | Provider crash or timeout, no changes, agent commit, branch/ref/evidence tampering, secret-like files, or controller error. `failure.reason` names which |
-| `HUMAN_BLOCKED` | Review BLOCK/budget, required validation/browser non-PASS plus reviewer PASS, or missing browser coverage. No non-PASS evidence can checkpoint |
-| `STOPPED` | Ctrl-C: the provider process group is terminated and the state recorded. Remote stop arrives in 0.6 |
+| `HUMAN_BLOCKED` | Review BLOCK/budget, required validation/browser non-PASS plus reviewer PASS, missing browser coverage, or an implementer provider/session failure whose rollover is blocked or awaits approval. No non-PASS evidence can checkpoint |
+| `STOPPED` | Ctrl-C: the provider process group is terminated and the state recorded. Remote stop is a later phase |
 
 Every run ends with a summary (also saved as `report.md`): implementation,
-provider, status, branch, worktree, files changed, controller validation,
-commit, known issues reported by the implementer, and the human's next step.
+active implementer (and whom it took over from), reviewer, status, branch,
+worktree, files changed, controller validation, rollover history with handoff
+paths, commit, known issues reported by the implementer, and the human's next
+step. `autobuild evidence RUN` adds state, cycle, current implementer/reviewer,
+and verifies every handoff package hash.
 
 ## Independent Review And Revision
 
@@ -200,7 +207,8 @@ configured providers. Execution configuration must match the frozen copy;
 only `max_review_cycles` can change. Exhausted budgets require an explicit
 human increase (schema maximum 10); prior cycles are never reset. A surviving
 `.controller.lock` must be investigated before a human removes it. Missing
-provider sessions fail clearly without fallback to a new session/provider.
+provider sessions are classified `session_unavailable`; without a configured
+rollover the run stops with a handoff, never a silent new session/provider.
 
 Resume checks all preserved normal-validation and browser manifests, log/artifact
 hashes and identity records, then runs fresh gates after the resumed implementation.
@@ -208,6 +216,45 @@ It never reuses prior PASS for changed source.
 Missing gate configuration requires a new run because execution config is frozen.
 Protected refs changed by unrelated human work also block resume; start a new
 run rather than silently rebasing preserved work.
+
+Resume continues the **active** implementer: the configured one, or the
+replacement an executed rollover installed. `autobuild resume --dry-run` prints
+`Resume mode: same-session` or the rollover it will perform.
+
+## Rollover (0.6)
+
+Same-session resume and rollover are different things and are recorded
+differently (`revision_history[].mode`):
+
+| | Same-session resume | Rollover |
+| --- | --- | --- |
+| Session | the recorded session continues (`resume_session_id`) | a new session; no provider memory |
+| Trigger | REVISE findings, or a human `autobuild resume` | a classified provider/session failure (`PROVIDERS.md`) |
+| Prompt | findings only ("Continue Approved Implementation") | "Take Over An Existing Implementation" + the full implementer prompt + handoff |
+
+When an implementer attempt fails with an eligible kind (quota, hard limit,
+unavailable provider, unresumable or exhausted session), the controller:
+
+1. captures the worktree as a snapshot and writes `rollover/rollover-NN/handoff.json`
+   (see `ARTIFACT_CONTRACT.md`), hashed into `state.rollover_history`;
+2. decides with `rollover_policy.py`: configured trigger, budget left
+   (`max_rollovers`, at most 1), allowed transition (listed replacement; a
+   provider-wide failure needs a different provider), replacement healthy now;
+3. if blocked, stops HUMAN_BLOCKED with the handoff preserved; if
+   `approval: human`, stops with the rollover `prepared` for `autobuild resume`;
+4. otherwise re-verifies the handoff against the live repository (package and
+   referenced artifact hashes, worktree branch/HEAD/snapshot, brief/config
+   hashes, protected refs, budget, transition) and starts the replacement as a
+   new session with the takeover prompt. Any mismatch fails
+   `rollover_handoff_invalid` (non-recoverable).
+
+The replacement's result then goes through the normal path: fresh Git evidence,
+fresh confined validation, fresh browser gates, a fresh reviewer. Earlier
+attempts' evidence stays as history and can never authorize the new source.
+A later REVISE resumes the *replacement's* session. A second eligible failure
+exceeds the budget and blocks. On resume, a `prepared` rollover executes after
+re-verification; a `blocked` one is decided again (for example if the
+replacement is installed now) and otherwise the original session continues.
 
 ## Live Verification Fixtures
 

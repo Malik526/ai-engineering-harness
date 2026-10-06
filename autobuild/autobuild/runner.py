@@ -17,11 +17,16 @@ from autobuild.checkpoint_policy import decide_checkpoint
 from autobuild.git_client import GitClient
 from autobuild.git_evidence import GitEvidence, capture
 from autobuild.git_shim import write_shim
+from autobuild.handoff import build_handoff, handoff_errors, takeover_prompt
 from autobuild.paths import CORE_ROOT
 from autobuild.preflight import RunPlan
 from autobuild.prompt_builder import build_prompt
 from autobuild.roles import IMPLEMENTER, REVIEWER
-from autobuild.provider_loader import load_adapter
+from autobuild.provider_failures import ProviderFailure
+from autobuild.provider_loader import ProviderLoadError, load_adapter
+from autobuild.provider_registry import assignment_for
+from autobuild.rollover_policy import decide as decide_rollover, settings as rollover_settings
+from autobuild.review_contract import normalize_review
 from autobuild.review_prompt import review_prompt, revision_prompt
 from autobuild.run_report import format_report
 from autobuild.run_store import RunStore, close_logger, utc_now
@@ -57,6 +62,9 @@ class Runner:
         self.validation: Optional[ValidationOutcome] = None
         self.protected_before: dict[str, Optional[str]] = {}
         self.attempt = 0
+        # The active implementer starts as the configured one and changes only through a verified rollover.
+        self.implementer = plan.assignment
+        self.implementer_adapter = plan.adapter
         self.active_adapter = plan.adapter
         self.expected_head = plan.base_commit
         self.browser = None
@@ -94,9 +102,13 @@ class Runner:
                 self.store = RunStore.create(config=plan.config, run_dir=plan.run_dir, run_id=plan.run_id,
                                             implementation_id=plan.meta["id"], brief_path=plan.brief_path,
                                             review_mode="independent")
-                self.store.update(review_history=[], revision_history=[], validation_history=[], browser_history=[], final_review_status=None)
+                self.store.update(review_history=[], revision_history=[], validation_history=[], browser_history=[],
+                                  rollover_history=[], final_review_status=None)
                 self._create_worktree()
-            self._implement(resume=bool(plan.resume_state))
+            if plan.resume_rollover is not None:
+                self._resume_rollover(plan.resume_rollover)
+            else:
+                self._implement(resume=bool(plan.resume_state))
             self._collect_evidence()
             self._validate()
             self._browser()
@@ -160,7 +172,8 @@ class Runner:
         self.protected_before = self.git.protected_refs()
         store.update(protected_refs=self.protected_before)
 
-    def _implement(self, *, resume: bool = False, review: Optional[dict] = None) -> None:
+    def _implement(self, *, resume: bool = False, review: Optional[dict] = None,
+                   takeover: Optional[dict] = None) -> None:
         plan, store = self.plan, self.store
         self._verify_frozen_brief()
         self._verify_browser_history()
@@ -175,8 +188,13 @@ class Runner:
                               branch=plan.branch, base_branch=plan.base_branch, base_commit=plan.base_commit,
                               project_docs=project_docs, validation_commands=commands)
         previous = [s for s in store.state["agent_sessions"] if s["role"] == IMPLEMENTER]
-        resumed_id = previous[-1]["session_id"] if resume and previous else None
-        if resume:
+        resumed_id = previous[-1]["session_id"] if resume and previous and not takeover else None
+        mode = "rollover" if takeover else ("resume" if resumed_id else "initial")
+        if takeover:
+            # A new session inherits project state through the verified handoff, never provider memory.
+            prompt = takeover_prompt(base_prompt=prompt, handoff=takeover["handoff"], run_dir=plan.run_dir,
+                                     review=takeover["review"])
+        elif resume:
             if review is None and store.state.get("review_history"):
                 review = json.loads(store.path(store.state["review_history"][-1]["artifact"]).read_text())
             prompt = revision_prompt(plan, store, review)
@@ -192,7 +210,7 @@ class Runner:
         request = AgentRequest(
             role=IMPLEMENTER, prompt_file=prompt_file, working_directory=plan.worktree,
             output_directory=store.path(f"logs/implementation-{self.attempt:02d}"), report_schema=load_schema("implementation-report"),
-            session_id=session_id, timeout_seconds=plan.implementer_timeout, model=plan.assignment.model,
+            session_id=session_id, timeout_seconds=plan.implementer_timeout, model=self.implementer.model,
             resume_session_id=resumed_id,
             env={"PATH": f"{guard_bin}{os.pathsep}{os.environ.get('PATH', '')}", "AUTOBUILD_REAL_GIT": real_git or "git",
                  "AUTOBUILD_WORKTREE": str(plan.worktree), "AUTOBUILD_RUN_ID": plan.run_id,
@@ -200,27 +218,31 @@ class Runner:
                  "AUTOBUILD_REVIEW_CYCLE": str(store.state["review_cycle"]),
                  "AUTOBUILD_SESSION_ID": resumed_id or session_id},
         )
-        session = {"provider": plan.assignment.provider, "role": IMPLEMENTER, "session_id": session_id,
+        session = {"provider": self.implementer.provider, "role": IMPLEMENTER, "session_id": session_id,
                    "started_at": utc_now(), "ended_at": None}
         sessions = store.state["agent_sessions"] + [session]
         history = store.state["revision_history"] + [{"attempt": self.attempt, "cycle": store.state["review_cycle"],
                    "session_id": session_id, "resume_session_id": resumed_id, "artifact_directory": prefix,
-                   "started_at": session["started_at"], "ended_at": None}]
+                   "started_at": session["started_at"], "ended_at": None, "provider": self.implementer.provider,
+                   "mode": mode, "failure": None}]
         fields = {"agent_sessions": sessions, "revision_history": history}
-        if store.current == RunState.REVISING:
+        if store.current in (RunState.REVISING, RunState.IMPLEMENTING):
             store.update(**fields)
         else:
             store.transition(RunState.IMPLEMENTING, **fields)
-        store.log.info("invoking implementer %s (%s)", plan.assignment.provider, plan.assignment.command)
-        self.active_adapter = plan.adapter
-        plan.adapter.start(request)
+        store.log.info("invoking implementer %s (%s; %s)", self.implementer.provider, self.implementer.command, mode)
+        adapter = self.implementer_adapter
+        self.active_adapter = adapter
+        adapter.start(request)
         try:
-            self.result = plan.adapter.get_result()
+            self.result = adapter.get_result()
         except KeyboardInterrupt:
-            plan.adapter.terminate()
+            adapter.terminate()
             raise
+        failure = self.result.failure if not self.result.succeeded else None
         session.update(session_id=self.result.session_id or session_id, ended_at=utc_now())
-        history[-1].update(session_id=session["session_id"], ended_at=session["ended_at"])
+        history[-1].update(session_id=session["session_id"], ended_at=session["ended_at"],
+                           failure=failure.as_record() if failure else None)
         store.update(agent_sessions=sessions, revision_history=history)
         store.write_json("implementation/result.json", self._result_doc())
         store.write_text("implementation/summary.md", _summary_markdown(self._result_doc()))
@@ -233,6 +255,9 @@ class Runner:
         store.log.info("implementer ended: exit=%s timed_out=%s report=%s", self.result.exit_code,
                        self.result.timed_out, "valid" if self.result.structured_output else self.result.output_error)
         self._verify_protected_refs()
+        if failure is not None and failure.rollover_eligible:
+            self._rollover(failure)
+            return
         if resumed_id and self.result.session_id != resumed_id:
             self._abort("implementer_resume_mismatch", "provider did not resume the recorded implementer session", recoverable=False)
 
@@ -246,8 +271,9 @@ class Runner:
         result = self.result
         if result is not None and not result.succeeded:
             reason = "provider_timeout" if result.timed_out else "provider_failed"
-            self._abort(reason, f"configured implementer {plan.assignment.provider}: exit_code={result.exit_code} "
-                               f"timed_out={result.timed_out}; {result.output_error or 'see logs/provider*.log'}")
+            kind = f"[{result.failure.kind}] " if result.failure else ""
+            self._abort(reason, f"implementer {self.implementer.provider}: exit_code={result.exit_code} "
+                               f"timed_out={result.timed_out}; {kind}{result.output_error or 'see logs/provider*.log'}")
         if self.evidence.branch != plan.branch:
             self._abort("branch_changed", f"worktree moved off {plan.branch} (now {self.evidence.branch})")
         if self.evidence.head_commit != self.expected_head:
@@ -326,25 +352,15 @@ class Runner:
         self._verify_browser_history()
         self._verify_validation_history()
         if not result.succeeded or result.structured_output is None:
-            self._abort("reviewer_failed", f"configured reviewer {assignment.provider}: exit={result.exit_code}; {result.output_error}")
-        review = dict(result.structured_output)
-        errors = schema_errors("review", review)
+            kind = f"[{result.failure.kind}] " if result.failure else ""
+            self._abort("reviewer_failed", f"configured reviewer {assignment.provider}: exit={result.exit_code}; "
+                                           f"{kind}{result.output_error}")
+        review, errors = normalize_review(result.structured_output, run_id=plan.run_id, implementation_id=plan.meta["id"],
+                                          cycle=cycle, provider=assignment.provider, session_id=actual_id,
+                                          reviewed_at=utc_now(), browser_evidence=self.browser is not None)
         if errors:
             self._abort("invalid_review", "; ".join(errors))
-        if (review.get("run_id"), review.get("implementation_id"), review.get("cycle")) != (plan.run_id, plan.meta["id"], cycle):
-            errors.append("review identity does not match the current run/cycle")
-        if not {"brief", "git_diff", "changed_files", "validation_output"} <= set(review.get("evidence_reviewed", [])):
-            errors.append("required authoritative evidence is missing")
-        if self.browser is not None and "browser_evidence" not in review.get("evidence_reviewed", []):
-            errors.append("controller browser evidence was not reviewed")
-        findings = review.get("findings", [])
-        if len({f["id"] for f in findings}) != len(findings):
-            errors.append("finding IDs are not unique")
-        if errors:
-            self._abort("invalid_review", "; ".join(errors))
-        review.update(reviewer={"provider": assignment.provider, "session_id": actual_id}, reviewed_at=utc_now())
-        if review["status"] == "BLOCKED":
-            review["status"] = "BLOCK"
+        findings = review["findings"]
         store.write_json(f"{prefix}.json", review)
         lines = [f"# Review {cycle}: {review['status']}", "", review.get("blocked_reason", "")]
         for finding in findings:
@@ -358,7 +374,7 @@ class Runner:
         if self.browser is not None:
             history[-1]["browser_artifact"] = f"browser/cycle-{self.attempt:02d}/results.json"
         store.update(review_history=history, final_review_status=review["status"])
-        self.active_adapter = plan.adapter
+        self.active_adapter = self.implementer_adapter
         return review
 
     def _verify_snapshot(self, role: str) -> None:
@@ -414,7 +430,11 @@ class Runner:
         if not decision.commit:
             return store.state.get("last_commit")
         message = (f"autobuild({plan.meta['id']}): {plan.meta['title']}\n\n"
-                   f"Autobuild-Run: {plan.run_id}\nAutobuild-Implementer: {plan.assignment.provider}\n")
+                   f"Autobuild-Run: {plan.run_id}\nAutobuild-Implementer: {self.implementer.provider}\n")
+        for record in store.state.get("rollover_history", []):
+            if record["status"] == "executed":
+                message += (f"Autobuild-Rollover: {record['from_provider']} -> {record['to_provider']} "
+                            f"({record['failure']['kind']})\n")
         commit = self.git.commit_tree_to_branch(plan.worktree, plan.branch, self.evidence.snapshot_tree,
                                                 self.evidence.head_commit, message)
         store.log.info("checkpoint commit %s on %s", commit[:12], plan.branch)
@@ -447,6 +467,96 @@ class Runner:
         if store.current is not RunState.STOP_REQUESTED:
             store.transition(RunState.STOP_REQUESTED, stop_requested=True)
         store.transition(RunState.STOPPED)
+
+    # --- Rollover ---
+
+    def _provider_health(self, provider: str) -> tuple[bool, str]:
+        try:
+            health = load_adapter(assignment_for(self.plan.config.data, IMPLEMENTER, provider)).health_check()
+        except (ProviderLoadError, KeyError) as exc:
+            return False, str(exc)
+        return health.available, health.detail
+
+    def _rollover(self, failure: ProviderFailure, *, approved: bool = False) -> None:
+        """Freeze the run, write the handoff, and take over only when policy, budget and health allow."""
+        plan, store = self.plan, self.store
+        history = store.state.get("rollover_history", [])
+        executed = sum(1 for r in history if r["status"] == "executed")
+        from_provider = self.implementer.provider
+        implementers = [s for s in store.state["agent_sessions"] if s["role"] == IMPLEMENTER]
+        from_session = implementers[-1]["session_id"] if implementers else None
+        decision = decide_rollover(plan.config.data, failure, from_provider, executed, self._provider_health)
+        approval = "human" if approved else rollover_settings(plan.config.data)["approval"]
+        index = len(history) + 1
+        artifact, sha, evidence = build_handoff(
+            run_dir=plan.run_dir, state=store.state, config_data=plan.config.data, git=self.git, index=index,
+            failed_attempt=self.attempt, failure=failure.as_record(), from_provider=from_provider,
+            from_session=from_session, to_provider=decision.replacement, approval=approval,
+            decision={"allowed": decision.allowed, "reason": decision.reason}, executed_before=executed,
+            created_at=utc_now())
+        record = {"index": index, "role": IMPLEMENTER, "failure": failure.as_record(), "failed_attempt": self.attempt,
+                  "from_provider": from_provider, "from_session_id": from_session, "to_provider": decision.replacement,
+                  "approval": approval, "status": "prepared" if decision.allowed else "blocked",
+                  "reason": decision.reason, "handoff_artifact": artifact, "handoff_sha256": sha,
+                  "snapshot_tree": evidence.snapshot_tree, "head_commit": evidence.head_commit,
+                  "replacement_attempt": None, "at": utc_now()}
+        store.update(rollover_history=history + [record])
+        self.evidence = evidence  # the frozen source at the handoff, so the report shows the preserved changes
+        store.log.warning("implementer %s failed (%s: %s); rollover %s: %s", from_provider, failure.kind,
+                          failure.detail, record["status"], decision.reason)
+        if not decision.allowed:
+            self._human_block(f"implementer {from_provider} failed ({failure.kind}); rollover blocked: "
+                              f"{decision.reason}. Work and handoff preserved: {plan.run_dir / artifact}")
+            raise RunAborted
+        if approval == "human" and not approved:
+            self._human_block(f"implementer {from_provider} failed ({failure.kind}); rollover to "
+                              f"{decision.replacement} prepared for approval ({plan.run_dir / artifact}). "
+                              "Approve by explicitly running autobuild resume")
+            raise RunAborted
+        self._take_over(record)
+
+    def _take_over(self, record: dict) -> None:
+        """Verify the handoff against the live repository, then start the replacement as a new session."""
+        plan, store = self.plan, self.store
+        errors = handoff_errors(run_dir=plan.run_dir, state=store.state, record=record, config_data=plan.config.data,
+                                git=self.git, protected_now=self.git.protected_refs())
+        if errors:
+            self._abort("rollover_handoff_invalid", "; ".join(errors), recoverable=False)
+        assignment = assignment_for(plan.config.data, IMPLEMENTER, record["to_provider"])
+        try:
+            adapter = load_adapter(assignment)
+            health = adapter.health_check()
+        except ProviderLoadError as exc:
+            health = None
+            detail = str(exc)
+        if health is None or not health.available:
+            self._mark_rollover(record["index"], status="blocked",
+                                reason=f"replacement {record['to_provider']} unavailable at takeover: "
+                                       f"{detail if health is None else health.detail}")
+            self._human_block(f"rollover replacement {record['to_provider']} is unavailable; work and handoff preserved")
+            raise RunAborted
+        handoff = json.loads((plan.run_dir / record["handoff_artifact"]).read_text())
+        pending = handoff["pending_review"]
+        review = json.loads((plan.run_dir / pending["path"]).read_text()) if pending else None
+        self._mark_rollover(record["index"], status="executed", replacement_attempt=self.attempt + 1)
+        store.log.warning("rollover %d: %s -> %s (%s); new session takes over through %s", record["index"],
+                          record["from_provider"], record["to_provider"], record["failure"]["kind"],
+                          record["handoff_artifact"])
+        self.implementer, self.implementer_adapter = assignment, adapter
+        self._implement(takeover={"handoff": handoff, "review": review})
+
+    def _resume_rollover(self, action: dict) -> None:
+        """Human resume of a rollover: execute a prepared one, or re-decide a blocked one now."""
+        record = action["record"]
+        if action["action"] == "execute":
+            self._take_over(record)
+        else:
+            self._rollover(ProviderFailure(record["failure"]["kind"], record["failure"]["detail"]), approved=True)
+
+    def _mark_rollover(self, index: int, **fields) -> None:
+        history = copy.deepcopy(self.store.state["rollover_history"])
+        history[index - 1].update(fields)
+        self.store.update(rollover_history=history)
 
     # --- Helpers ---
 

@@ -29,11 +29,20 @@ def _next_step(state: dict[str, Any], plan: Any) -> str:
     return f"Unexpected final state {s}; inspect {plan.run_dir}."
 
 
+def _implementer_line(state: dict[str, Any], plan: Any) -> str:
+    sessions = [s for s in state.get("agent_sessions", []) if s["role"] == "implementer"]
+    active = sessions[-1]["provider"] if sessions else plan.assignment.provider
+    executed = [r for r in state.get("rollover_history", []) if r["status"] == "executed"]
+    origin = f" (took over from {executed[-1]['from_provider']} by rollover)" if executed else ""
+    return f"Implementer: {active}{origin}"
+
+
 def format_report(state: dict[str, Any], result: Optional[dict[str, Any]], evidence: Any,
                   validation: Any, plan: Any) -> str:
     lines = [
         f"Implementation: {plan.meta['id']} — {plan.meta['title']}",
-        f"Provider: {plan.assignment.provider} ({plan.assignment.display_name})",
+        _implementer_line(state, plan),
+        f"Reviewer: {(plan.reviewer_assignment.provider if plan.reviewer_assignment else '—')} (fresh session each cycle)",
         f"Status: {state['state']}" + (f" ({state['failure']['reason']})" if state.get("failure") else ""),
         f"Branch: {state.get('branch') or '—'} (from {plan.base_branch} @ {plan.base_commit[:12]})",
         f"Worktree: {state.get('worktree') or '—'}",
@@ -53,6 +62,12 @@ def format_report(state: dict[str, Any], result: Optional[dict[str, Any]], evide
         lines += [f"  {c['name']}: {c['status']}" for c in validation.document["commands"]]
     else:
         lines.append("Validation (controller): not run")
+    rollovers = state.get("rollover_history", [])
+    if rollovers:
+        executed = sum(1 for r in rollovers if r["status"] == "executed")
+        lines.append(f"Rollovers: {executed} executed of {len(rollovers)} recorded")
+        lines += [f"  #{r['index']} {r['from_provider']} -> {r['to_provider'] or 'none'} ({r['failure']['kind']}): "
+                  f"{r['status']}; {r['reason']}; handoff {plan.run_dir / r['handoff_artifact']}" for r in rollovers]
     if state.get("review_mode") == "independent":
         lines.append(f"Independent review: {state.get('final_review_status') or 'not decided'}; cycles: {state['review_cycle']}")
     for browser in state.get("browser_history", []):

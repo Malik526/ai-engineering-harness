@@ -27,7 +27,9 @@ def real_git(*args: str) -> subprocess.CompletedProcess:
 
 
 def main() -> int:
-    mode = os.environ.get("FAKE_AGENT_MODE", "write")
+    provider = sys.argv[1] if len(sys.argv) > 1 else "fake-a"
+    mode = os.environ.get("FAKE_AGENT_MODE_" + provider.upper().replace("-", "_"),
+                          os.environ.get("FAKE_AGENT_MODE", "write"))
     prompt = sys.stdin.read()
     if os.environ.get("AUTOBUILD_ROLE") == "reviewer":
         cycle = int(os.environ["AUTOBUILD_REVIEW_CYCLE"])
@@ -41,6 +43,9 @@ def main() -> int:
             return 0
         if status == "FAIL":
             return 3
+        if status == "SCHEMA":
+            print("API Error: 400 tools.3.custom.input_schema: input_schema does not support allOf", file=sys.stderr)
+            return 1
         report = {"schema_version": 1, "run_id": os.environ["AUTOBUILD_RUN_ID"],
                   "implementation_id": os.environ["AUTOBUILD_IMPLEMENTATION_ID"], "cycle": cycle,
                   "status": status, "reviewer": {"provider": "fake-a", "session_id": os.environ["AUTOBUILD_SESSION_ID"]},
@@ -56,6 +61,22 @@ def main() -> int:
             report["blocked_reason"] = "Human prerequisite missing"
         print(json.dumps(report))
         return 0
+    with open(os.environ.get("FAKE_PROMPT_LOG", os.devnull), "a") as log:
+        log.write(f"--- {provider}\n{prompt}\n")
+    resumed = "Continue Approved Implementation" in prompt
+    if mode.endswith("_on_resume"):
+        mode = mode[:-len("_on_resume")] if resumed else "write"
+    if mode == "quota":
+        Path("partial.txt").write_text("half-finished work before the quota ran out\n")
+        print("Error: You've hit your usage limit. Try again later.", file=sys.stderr)
+        return 1
+    if mode == "session_gone":
+        print("No conversation found with session ID: " + os.environ.get("AUTOBUILD_SESSION_ID", "?"), file=sys.stderr)
+        return 1
+    if mode == "transient":
+        Path("partial.txt").write_text("half-finished work\n")
+        print("API Error: 529 overloaded", file=sys.stderr)
+        return 1
     if mode == "fail":
         Path("partial.txt").write_text("half-finished work\n")
         print("simulated provider crash", file=sys.stderr)

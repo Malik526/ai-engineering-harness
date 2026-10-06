@@ -22,6 +22,11 @@
     "duration_seconds": { "type": "number", "minimum": 0 },
     "report_status": { "enum": ["valid", "invalid", "missing"] },
     "report_error": { "type": ["string", "null"] },
+    "failure": {
+      "description": "Adapter-classified provider/session failure (provider_failures.py kinds); null on success.",
+      "type": ["object", "null"], "additionalProperties": false, "required": ["kind", "detail"],
+      "properties": { "kind": { "type": "string", "minLength": 1 }, "detail": { "type": "string" } }
+    },
     "reported": {
       "description": "The implementer's report (implementation-report.schema.json), or null when missing/invalid.",
       "oneOf": [{ "type": "null" }, { "type": "object" }]

@@ -45,8 +45,8 @@ def test_run_artifacts_follow_contract(tmp_path, monkeypatch, fake_registry):
     _, outcome, _ = _run(tmp_path, monkeypatch)
     run_dir = outcome.run_dir
     for spec in RUN_ARTIFACTS:
-        if spec.path.startswith("browser/"):
-            continue  # phase 0.4
+        if spec.path.startswith(("browser/", "rollover/")):
+            continue  # conditional: browser gates (0.4) and rollover handoffs (0.6, see test_rollover.py)
         assert (run_dir / spec.path.replace("NN", "01").rstrip("/")).exists(), spec.path
     result = json.loads((run_dir / "implementation/result.json").read_text())
     assert schema_errors("implementation-result", result) == []
@@ -235,3 +235,10 @@ def test_preflight_refuses_worktree_root_inside_project(tmp_path, fake_registry)
     with pytest.raises(PreflightError) as exc:
         preflight(brief, root)
     assert any("inside the project" in i for i in exc.value.issues)
+
+
+def test_prompt_shows_argv_validation_commands_with_shell_quoting():
+    from autobuild.prompt_builder import _validation_lines
+    line = _validation_lines([{"name": "content", "kind": "test",
+                               "command": ["grep", "-qx", "Autobuild 0.2 verification", "file.txt"]}])
+    assert "`grep -qx 'Autobuild 0.2 verification' file.txt`" in line

@@ -20,6 +20,12 @@ agents:                      # any registry provider may fill any role it suppor
 #     command: claude
 #     model: <model id>
 
+# rollover:                  # optional; absent = a quota/session failure stops for a human (with a handoff)
+#   max_rollovers: 1         # per run; at most 1
+#   approval: automatic      # automatic | human (prepare the handoff, wait for `autobuild resume`)
+#   implementer: [codex]     # ordered replacement implementers; a new session takes over the worktree
+#   # on: [quota_exhausted, session_unavailable]   # default: every eligible failure kind
+
 git:
   protected_branches: [main]
   branch_prefix: agent/

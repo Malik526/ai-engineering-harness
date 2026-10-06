@@ -10,6 +10,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping, Optional, Protocol
 
+from autobuild.provider_failures import ProviderFailure
+
 
 @dataclass(frozen=True)
 class ProviderHealth:
@@ -45,6 +47,7 @@ class AgentResult:
     stderr_file: Path
     structured_output: Optional[dict[str, Any]]  # the agent's final report, parsed
     output_error: Optional[str]  # why structured_output is missing, if it is
+    failure: Optional[ProviderFailure] = None  # classified cause when the operation did not succeed
 
     @property
     def succeeded(self) -> bool:

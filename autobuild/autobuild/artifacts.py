@@ -40,6 +40,8 @@ RUN_ARTIFACTS: tuple[ArtifactSpec, ...] = (
     ArtifactSpec("browser/cycle-NN/results.json", EVIDENCE, "controller", "Immutable browser gate results, snapshot identity and hashed file manifest"),
     ArtifactSpec("browser/cycle-NN/<gate-id>/evidence.json", EVIDENCE, "controller", "Gate argv, isolated environment hash, outcome, timing and bounded log summaries"),
     ArtifactSpec("browser/cycle-NN/<gate-id>/", EVIDENCE, "controller", "Raw command/service logs and confined screenshots, traces, videos or reports in artifacts/"),
+    ArtifactSpec("rollover/rollover-NN/handoff.json", EVIDENCE, "controller", "Rollover handoff: run/cycle/source identity, classified failure, providers, budget and hashes of every inherited artifact"),
+    ArtifactSpec("rollover/rollover-NN/", EVIDENCE, "controller", "Worktree snapshot frozen at the handoff (git.json, diff.patch, changed-files.txt)"),
     ArtifactSpec("review/review-NN.json", DECISION, "reviewer", "Structured review result (review.schema.json)"),
     ArtifactSpec("review/review-NN.md", SUPPLEMENTAL, "reviewer", "Reviewer's narrative for the same cycle"),
     ArtifactSpec("review/review-NN-prompt.md", EVIDENCE, "controller", "Evidence-first input to the fresh reviewer"),

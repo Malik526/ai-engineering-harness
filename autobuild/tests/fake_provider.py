@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Optional
 
 from autobuild.agent_provider import AgentRequest
+from autobuild.provider_failures import QUOTA_EXHAUSTED, SCHEMA_REJECTED, SESSION_UNAVAILABLE, TRANSIENT
 from autobuild.structured_output import validate_report
 from autobuild.subprocess_adapter import SubprocessAdapter
 
@@ -14,7 +15,12 @@ FAKE_AGENT = Path(__file__).with_name("fake_agent.py")
 
 class FakeAdapter(SubprocessAdapter):
     def build_command(self, request: AgentRequest) -> list[str]:
-        return [sys.executable, str(FAKE_AGENT)]
+        return [sys.executable, str(FAKE_AGENT), self.provider_id]
+
+    def failure_patterns(self) -> list[tuple[str, str]]:
+        return [(SCHEMA_REJECTED, r"input_schema"), (SESSION_UNAVAILABLE, r"No conversation found"),
+                (QUOTA_EXHAUSTED, r"usage limit"),
+                (TRANSIENT, r"overloaded")]
 
     def parse_output(self, request: AgentRequest, stdout_file: Path) -> tuple[Optional[str], Optional[dict], Optional[str]]:
         lines = stdout_file.read_text().strip().splitlines() if stdout_file.exists() else []

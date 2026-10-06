@@ -130,6 +130,15 @@ def _show_agents(project: Path) -> bool:
     return True
 
 
+def _rollover_line(config_data: dict) -> str:
+    from autobuild.rollover_policy import settings
+    policy = settings(config_data)
+    if not policy["max_rollovers"]:
+        return "disabled (a provider/session failure stops for a human, with a handoff package)"
+    return (f"max {policy['max_rollovers']} per run to {', '.join(policy['implementer'])}; "
+            f"approval {policy['approval']}; on {', '.join(policy['on'])}")
+
+
 def _run(brief: Path, project: Optional[Path], base: Optional[str], assume_yes: bool, dry_run: bool) -> int:
     from autobuild.git_client import GitClient
     from autobuild.preflight import PreflightError, preflight
@@ -149,6 +158,7 @@ def _run(brief: Path, project: Optional[Path], base: Optional[str], assume_yes: 
     print(f"Autonomy: {plan.meta['autonomy'].upper()}")
     print(f"Implementer: {plan.assignment.provider} ({plan.assignment.display_name}, {plan.health.version or 'version unknown'})")
     print(f"Reviewer: {plan.reviewer_assignment.provider} (fresh session each cycle)")
+    print(f"Rollover: {_rollover_line(plan.config.data)}")
     print(f"Base branch: {plan.base_branch} @ {plan.base_commit[:12]}")
     print(f"Target branch: {plan.branch}")
     print(f"Worktree: {plan.worktree}")
@@ -184,6 +194,14 @@ def _resume(run: Path, project: Optional[Path], dry_run: bool) -> int:
         for issue in exc.issues:
             print(f"  - {issue}")
         return 1
+    action = plan.resume_rollover
+    if action is None:
+        print(f"Resume mode: same-session (implementer {plan.assignment.provider})")
+    else:
+        record = action["record"]
+        target = record["to_provider"] if action["action"] == "execute" else "re-decided from the configured list"
+        print(f"Resume mode: rollover {record['index']} from {record['from_provider']} "
+              f"({record['failure']['kind']}) to {target}; handoff {plan.run_dir / record['handoff_artifact']}")
     if dry_run:
         print(f"Resume preflight passed for {plan.run_id}; nothing was modified.")
         return 0
@@ -251,7 +269,7 @@ def _show_gate(path: Path, done: str) -> bool:
 
 
 def _show_evidence(run: Path, attempt: Optional[int]) -> bool:
-    from autobuild.browser_contract import evidence_errors as browser_evidence_errors
+    from autobuild.browser_contract import digest, evidence_errors as browser_evidence_errors, safe_file
     from autobuild.validation_contract import evidence_errors as validation_evidence_errors
     try:
         state = json.loads((run / "state.json").read_text())
@@ -277,7 +295,20 @@ def _show_evidence(run: Path, attempt: Optional[int]) -> bool:
                               f"artifacts={len(entry['artifacts'])}; {entry['detail']}")
                     print(f"  {identity}: {entry['status']} ({'required' if entry['required'] else 'optional'}); "
                           f"exit={entry['exit_code']}; {suffix}")
-        if not found:
+        sessions = state.get("agent_sessions", [])
+        current = {role: next((x["provider"] for x in reversed(sessions) if x["role"] == role), "—")
+                   for role in ("implementer", "reviewer")}
+        rollovers = state.get("rollover_history", [])
+        print(f"Run {state['run_id']}: {state['state']}; review cycle {state['review_cycle']}; "
+              f"implementer {current['implementer']}; reviewer {current['reviewer']}; "
+              f"rollovers executed {sum(r['status'] == 'executed' for r in rollovers)}")
+        for record in rollovers:
+            path = run / record["handoff_artifact"]
+            intact = safe_file(path, run) and digest(path) == record["handoff_sha256"]
+            ok &= _report(str(path), [] if intact else ["handoff package missing or modified"])
+            print(f"  rollover {record['index']}: {record['from_provider']} -> {record['to_provider'] or 'none'} "
+                  f"({record['failure']['kind']}, {record['approval']}): {record['status']}; {record['reason']}")
+        if not found and not rollovers:
             return _report(str(run), ["no controller validation or browser evidence for the selected attempt"])
         return ok
     except (OSError, ValueError, KeyError, TypeError) as exc:
@@ -312,7 +343,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("run", type=Path)
     p.add_argument("--project", type=Path)
     p.add_argument("--dry-run", action="store_true")
-    p = sub.add_parser("evidence", help="inspect and verify controller validation and browser manifests")
+    p = sub.add_parser("evidence", help="inspect and verify controller validation, browser and rollover handoff evidence")
     p.add_argument("run", type=Path, help="run directory")
     p.add_argument("--attempt", type=int)
     p = sub.add_parser("fixture")

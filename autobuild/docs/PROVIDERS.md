@@ -65,7 +65,7 @@ Autobuild doesn't require it.
 - `health_check()`: a cheap local check (executable found, `--version` succeeds). It never starts a session.
 - `start(request)` / `get_result()` / `terminate()`: run non-interactively and report how it ended.
 - `AgentRequest`: role, prompt file (sent on stdin), worktree, output directory, report schema, session id, timeout, extra environment, model.
-- `AgentResult`: provider, session id, exit code, timed out / terminated, duration, stdout and stderr files, and the parsed structured report.
+- `AgentResult`: provider, session id, exit code, timed out / terminated, duration, stdout and stderr files, the parsed structured report, and `failure`: the adapter's classification of an unsuccessful run (see Failure Classification).
 
 `autobuild/subprocess_adapter.py` holds the shared process handling: its own
 process group, files for stdin/stdout/stderr, timeout and termination.
@@ -76,8 +76,9 @@ Browser gates (0.4) do not invoke a provider or change adapter behavior. The
 controller runs declared project argv in its own sandbox and gives immutable
 evidence to any configured reviewer. Reviewers must acknowledge browser_evidence
 when present; PASS cannot override required non-PASS gates. Implementer resume
-and fresh reviewer identity checks remain unchanged. Provider quota failures
-remain explicit failures without cross-provider fallback; see `EVALUATION_0_4.md`.
+and fresh reviewer identity checks remain unchanged. Since 0.6 a classified
+provider/session failure can hand implementation to another configured provider
+only through bounded rollover (below); there is still no implicit fallback.
 
 | Adapter | Invocation | Structured output | Session id | Confinement |
 | --- | --- | --- | --- | --- |
@@ -94,24 +95,79 @@ restriction documented in [OpenAI Structured Outputs](https://developers.openai.
 Claude retains the full schema. Raw process logs and actual IDs are kept per
 attempt/cycle. Both adapters reject reviewer resume requests.
 
-Known limitation (found 2026-10-05, Claude Code 2.1.289): Claude **cannot
-currently serve as reviewer**. The review contract's top-level `allOf`
-conditionals are rejected by the API (`input_schema does not support oneOf,
-allOf, or anyOf at the top level`), so every Claude review fails
-`reviewer_failed` before judging anything. The implementer role is unaffected,
-since its report schema has no top-level conditionals. Configure Codex as
-reviewer until the Claude adapter projects the schema the way the Codex adapter
-does. See `EVALUATION_0_5.md`.
+Resolved 2026-10-05 (0.6): Claude Code 2.1.289 rejected the review contract
+because its top-level `allOf` conditionals reach the API as a tool
+`input_schema`, which may not combine schemas at the top level. Claude can now
+serve as reviewer; see Structured Output Portability. The 0.5 finding is kept in
+`EVALUATION_0_5.md`; the live proof is in `EVALUATION_0_6.md`.
 
 The controller loads the adapter named in the registry (`adapter:
 module:Class`) for the role being run. A missing or unhealthy configured
-provider stops preflight with `Status: unavailable`. Autobuild never falls
-back to another provider.
+provider stops preflight with `Status: unavailable`. Autobuild never silently
+falls back to another provider; the only provider change is a configured,
+bounded rollover (below), recorded with its reason and handoff.
+
+## Structured Output Portability (0.6)
+
+There is one canonical contract per report (`schemas/review.schema.json`,
+`schemas/implementation-report.schema.json`). An adapter may change only the
+**wire syntax** a CLI accepts, and only by relaxing it:
+
+```text
+canonical schema ─▶ adapters/claude_schema.py ─▶ --json-schema   (drops top-level combinators/annotations)
+canonical schema ─▶ adapters/codex_schema.py  ─▶ --output-schema (strict subset; optional fields nullable)
+provider answer  ─▶ adapter validates against the unchanged canonical schema
+                 ─▶ review_contract.normalize_review ─▶ one persisted PASS / REVISE / BLOCK review
+```
+
+Constraints a projection drops (for example "REVISE needs findings") are still
+enforced by the canonical validation, so a relaxed wire schema can never admit
+a semantically different review. A schema a projection cannot express (not a
+top-level object, or a top-level `$ref`) is refused rather than guessed. There is
+no provider-specific review type: identity, time, BLOCKED→BLOCK, required
+evidence, browser acknowledgement and unique finding IDs are applied by
+`review_contract.py` to every reviewer's answer.
+
+## Failure Classification (0.6)
+
+When an invocation does not succeed, the adapter classifies it from the CLI's
+own error text (Claude: an `is_error` result envelope or stderr; Codex:
+top-level `error`/`turn.failed` events or stderr), never from the agent's
+answer. Kinds live in `provider_failures.py`:
+
+| Kind | Scope | Rollover trigger |
+| --- | --- | --- |
+| `quota_exhausted`, `provider_hard_limit`, `provider_unavailable` | provider-wide | yes, to a different provider |
+| `session_unavailable`, `session_exhausted` | this session | yes; the same provider may restart if listed |
+| `transient`, `schema_rejected`, `timeout`, `interrupted`, `invalid_output`, `unknown` | — | never |
+
+The patterns were checked against real output (`tests/provider_samples/`):
+Codex's usage-limit event, Codex and Claude unknown-session errors, and Claude's
+schema rejection. An unrecognised message is `unknown`, which never triggers
+rollover: classification fails toward stopping for a human.
+
+## Bounded Rollover (0.6)
+
+```yaml
+rollover:
+  max_rollovers: 1        # per run; 0.6 caps this at 1
+  approval: automatic     # or human: prepare the handoff and stop until `autobuild resume`
+  implementer: [claude]   # ordered replacements; never a provider not listed here
+  on: [quota_exhausted, session_unavailable]  # optional; default: every eligible kind
+```
+
+Absent means disabled: an eligible failure still writes a handoff package and
+stops HUMAN_BLOCKED. The replacement is a new session that takes over the
+preserved worktree; see `RUNNER.md` → Rollover and ADR 0006. Reviewer rollover is
+not implemented: reviewers are always fresh sessions, so configure the reviewer
+you want explicitly.
 
 ## Adding a Provider
 
 1. Add an entry to `providers/registry.yaml`: id, `display_name`, `executable`, supported `roles`.
 2. Add `autobuild/adapters/<id>.py`, usually a `SubprocessAdapter` subclass implementing `build_command()` and `parse_output()`, and set its `adapter` entry in the registry.
+   If the CLI's structured-output API restricts JSON Schema, project the canonical schema in the adapter (relaxing only) and validate answers against the canonical one.
+   Implement `failure_patterns()` (and `provider_error_text()` if errors are not on stderr) from the CLI's real error output, so quota and lost-session failures can be classified.
 3. Assign it to a role in a project config and run `autobuild config <project>`.
 
 No schema change is needed. Provider ids are open strings, validated against

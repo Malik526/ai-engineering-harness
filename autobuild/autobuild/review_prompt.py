@@ -36,11 +36,19 @@ def review_prompt(plan, store, cycle: int, attempt: int, session_id: str) -> str
         f"reviewed_at must be a full ISO-8601 timestamp, for example {store.state['updated_at']}. Finding IDs use R{cycle}-1, R{cycle}-2, etc.",
         "## Supplemental Implementer Narrative (Read Last)\n" + store.path(f"{prefix}/summary.md").read_text(),
     ]
+    executed = [r for r in store.state.get("rollover_history", []) if r["status"] == "executed"]
+    if executed:
+        record = executed[-1]
+        blocks.insert(6, f"Rollover (controller record): {record['from_provider']} stopped with "
+                         f"{record['failure']['kind']}; a new {record['to_provider']} session took over through "
+                         f"{plan.run_dir / record['handoff_artifact']}. Judge the current diff as one implementation; "
+                         "neither implementer's narrative is evidence.")
     browser = store.path(f"browser/cycle-{attempt:02d}/results.json")
     if browser.is_file():
         document = json.loads(browser.read_text())
         summary = {key: value for key, value in document.items() if key != "files"}
-        blocks.insert(10, "## Controller Browser Evidence\n" + json.dumps(summary, indent=2)
+        anchor = next(i for i, block in enumerate(blocks) if block.startswith("## Controller Validation"))
+        blocks.insert(anchor, "## Controller Browser Evidence\n" + json.dumps(summary, indent=2)
                       + "\nImmutable manifest and raw artifacts: " + str(browser)
                       + "\nInclude browser_evidence in evidence_reviewed. Required gates must PASS; "
                         "use REVISE for fixable FAIL and BLOCK for unavailable tools or missing coverage.")
