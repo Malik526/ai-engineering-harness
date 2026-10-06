@@ -89,6 +89,22 @@ class ClaudeAdapter(SubprocessAdapter):
         return session_id, report, error
 
 
+    reports_usage = True
+
+    def parse_usage(self, request: AgentRequest) -> Optional[dict]:
+        envelope = _last_json_object(self._stdout_file(request))
+        usage = (envelope or {}).get("usage")
+        if not isinstance(usage, dict):
+            return None
+        tokens = [usage.get(k, 0) for k in ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens",
+                                            "output_tokens")]
+        if not all(isinstance(t, int) and t >= 0 for t in tokens):
+            return None
+        record = {"input_tokens": sum(tokens[:3]), "output_tokens": tokens[3], "total_tokens": sum(tokens)}
+        if isinstance(envelope.get("total_cost_usd"), (int, float)) and envelope["total_cost_usd"] >= 0:
+            record["provider_cost_usd"] = float(envelope["total_cost_usd"])
+        return record
+
     def failure_patterns(self) -> list[tuple[str, str]]:
         return _FAILURE_PATTERNS
 

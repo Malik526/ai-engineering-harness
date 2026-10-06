@@ -47,6 +47,13 @@ class SubprocessAdapter:
         """Return (session_id, structured_output, output_error) from the finished process's output."""
         raise NotImplementedError
 
+    # True when this CLI reports token usage the controller can account (needed for limits.max_usage_tokens).
+    reports_usage = False
+
+    def parse_usage(self, request: AgentRequest) -> Optional[dict[str, Any]]:
+        """Normalized provider-reported usage: input (including cached) and output tokens. None if absent."""
+        return None
+
     def failure_patterns(self) -> list[tuple[str, str]]:
         """Ordered (failure kind, regex) pairs for this CLI's own error messages."""
         return []
@@ -145,6 +152,7 @@ class SubprocessAdapter:
             structured_output=structured,
             output_error=error,
             failure=failure,
+            usage=self.parse_usage(request),
         )
 
     def terminate(self) -> None:

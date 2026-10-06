@@ -48,6 +48,7 @@ class AgentResult:
     structured_output: Optional[dict[str, Any]]  # the agent's final report, parsed
     output_error: Optional[str]  # why structured_output is missing, if it is
     failure: Optional[ProviderFailure] = None  # classified cause when the operation did not succeed
+    usage: Optional[dict[str, Any]] = None  # provider-reported tokens, normalized; None when not reported
 
     @property
     def succeeded(self) -> bool:

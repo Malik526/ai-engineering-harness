@@ -7,6 +7,7 @@ from typing import Any
 from autobuild.paths import PROJECT_CONFIG_RELPATH
 from autobuild import provider_registry
 from autobuild.provider_registry import RoleAssignment, assignment_errors, resolve_assignments
+from autobuild.governance import governance_config_errors
 from autobuild.rollover_policy import rollover_config_errors
 from autobuild.schemas import schema_errors
 from autobuild.yaml_loader import load_yaml
@@ -68,6 +69,7 @@ def config_errors(data: Any) -> list[str]:
             errors.append(f"git: protected branch {protected!r} falls under branch_prefix {prefix!r}")
     errors.extend(assignment_errors(data))
     errors.extend(rollover_config_errors(data, provider_registry.load_registry()["providers"]))
+    errors.extend(governance_config_errors(data))
     errors.extend(browser_config_errors(data["validation"].get("browser_gates", [])))
     errors.extend(validation_config_errors(data["validation"]))
     return errors

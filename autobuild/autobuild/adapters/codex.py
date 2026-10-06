@@ -73,6 +73,24 @@ class CodexAdapter(SubprocessAdapter):
             error = f"{error}; provider error: {error_event}"
         return session_id, report, error
 
+    reports_usage = True
+
+    def parse_usage(self, request: AgentRequest) -> Optional[dict]:
+        """Sum of `turn.completed` usage; Codex's input_tokens already include cached input."""
+        path, found, input_tokens, output_tokens = self._stdout_file(request), False, 0, 0
+        if not path.exists():
+            return None
+        for line in path.read_text(errors="replace").splitlines():
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            usage = event.get("usage") if isinstance(event, dict) and event.get("type") == "turn.completed" else None
+            if isinstance(usage, dict) and isinstance(usage.get("input_tokens"), int) and isinstance(usage.get("output_tokens"), int):
+                found, input_tokens, output_tokens = True, input_tokens + usage["input_tokens"], output_tokens + usage["output_tokens"]
+        return {"input_tokens": input_tokens, "output_tokens": output_tokens,
+                "total_tokens": input_tokens + output_tokens} if found else None
+
     def failure_patterns(self) -> list[tuple[str, str]]:
         return _FAILURE_PATTERNS
 

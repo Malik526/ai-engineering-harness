@@ -31,17 +31,18 @@ def _payload(**overrides):
     return build_notification(**kwargs)
 
 
-def test_should_notify_only_on_entering_notable_states():
-    assert should_notify(RunState.REVIEWING, RunState.PASSED)
-    assert not should_notify(RunState.PASSED, RunState.PASSED)
+def test_should_notify_only_on_entering_final_states():
+    assert should_notify(RunState.PASSED, RunState.COMPLETED)
+    assert should_notify(RunState.IMPLEMENTING, RunState.HUMAN_BLOCKED)
+    assert not should_notify(RunState.REVIEWING, RunState.PASSED)  # transient: COMPLETED follows
+    assert not should_notify(RunState.COMPLETED, RunState.COMPLETED)
     assert not should_notify(RunState.VALIDATING, RunState.REVIEWING)
 
 
 def test_payload_derived_from_structured_data():
     payload = _payload()
     assert payload["validation"] == {
-        "authoritative": True, "tests_passed": 37, "tests_failed": 0,
-        "browser_checks_passed": 0, "browser_checks_failed": 0, "failed_commands": [],
+        "authoritative": True, "commands_passed": 1, "commands_failed": 0, "failed_commands": [],
     }
     # Reviews are ordered by cycle regardless of input order.
     assert payload["review"]["initial_status"] == "REVISE"
@@ -71,8 +72,8 @@ def test_console_rendering():
     stream = io.StringIO()
     ConsoleNotifier(stream).send(_payload())
     text = stream.getvalue()
-    assert text.startswith("Content Automation Autonomous Build — EX-1 PASSED")
-    assert "37 tests passed, 0 failed" in text
+    assert text.startswith("Content Automation Autobuild — EX-1 ")
+    assert "1 validation command(s) passed, 0 failed" in text and "No browser gates" in text
     assert "EX-2 — autonomy YELLOW" in text
     assert "main: unchanged" in text
     assert "<!--" not in text

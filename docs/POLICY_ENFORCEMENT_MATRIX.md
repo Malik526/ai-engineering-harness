@@ -54,6 +54,19 @@ Implementation status:
 
 ## Vendor Capability Reuse
 
+### Autobuild 0.7 Run Governance Controls (2026-10-05)
+
+Autonomous continuation is bounded by controller-owned budgets (runtime,
+revision attempts, review cycles, rollovers, validation and browser runs,
+provider-reported tokens) checked before every agent or tool operation. A
+watchdog outside the model process terminates a running provider when the
+runtime budget ends or a file-based remote stop arrives. Every finished run
+records one canonical stop reason; budget and remote stops preserve all work
+and evidence and never checkpoint. Budgets change only through
+`autobuild resume --override-limits`, recorded in the run. Notifications are
+built from controller records and their delivery cannot alter run state. See
+ADR 0007 and `autobuild/docs/EVALUATION_0_7.md`.
+
 ### Autobuild 0.6 Provider Continuity Controls (2026-10-05)
 
 Reviewer output from any provider is checked against one canonical review
@@ -148,6 +161,10 @@ ignored-file/process side effects remain gaps, not claims of full confinement.
 - Failure classification relies on each CLI's error text. A changed message
   becomes `unknown`, which fails safe (stop for a human) but loses rollover.
   Refresh `tests/provider_samples/` when CLIs change.
+
+- Governance cannot interrupt a validation or browser command mid-run (they
+  stop at the next boundary, bounded by their own timeouts), token budgets are
+  checked between operations, and the only remote-stop channel is a local file.
 
 ## Manual Completion Backing (2026-10-04)
 

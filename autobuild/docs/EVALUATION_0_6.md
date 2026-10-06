@@ -2,7 +2,10 @@
 
 Evaluation date: 2026-10-05 (America/New_York; run timestamps are UTC). This
 record evaluates reviewer portability and bounded implementer rollover.
-Providers: Claude Code 2.1.289, Codex CLI 0.160.0.
+Providers: Claude Code 2.1.289 (2.1.290 after an automatic update before the
+final runs), Codex CLI 0.160.0. Codex was out of quota between the first and the
+final runs; Codex-dependent scenarios ran once it was available, with no
+provider substitution.
 
 ## Root Cause Of The Claude Reviewer Defect
 
@@ -61,11 +64,23 @@ provider-wide transition rule makes four rollover tests fail.
 All fixtures live in the ignored `.test-runtime/`, have no remote, and kept
 `main` at their base commit. No harness commit, merge or push occurred.
 
-### A. Claude reviewer (defect fixed)
+### A. Reviewer matrix (Claude defect fixed, both reviewers live)
 
-| Fixture | Pairing | Result |
-| --- | --- | --- |
-| `live-06-claude-review` | Claude → Claude | Confined validation PASS; fresh Claude reviewer `4e06dea6…` PASS; checkpoint `538d1ac301f3` on the run branch; `main` `f0a9c33029b0` unchanged |
+Every pairing ran the standard V-1 fixture with confined validation PASS, one
+review cycle and a checkpoint on the run branch only; each fixture's `main`
+stayed at its base.
+
+| Fixture | Implementer → reviewer | Reviewer session | Result |
+| --- | --- | --- | --- |
+| `live-06-claude-review` | Claude → Claude | `4e06dea6…` | PASS; checkpoint `538d1ac301f3`; `main` `f0a9c33029b0` |
+| `live-06-claude-impl-codex-review` | Claude → Codex | `01a10ea4-9633…` | PASS; checkpoint `f9d9eafcbe5e`; `main` `fd84a3de17eb` |
+| `live-06-codex-impl-claude-review` | Codex → Claude | `3cc0acf3…` | PASS; checkpoint `24a4f3af6650`; `main` `9d4cc5067cba` |
+| `live-06-codex-codex` | Codex → Codex | `01a10ea4-e4a8…` (implementer `01a10ea4-71d8…`) | PASS; checkpoint `4063f6913ca2`; `main` `81b2c44312dd` |
+
+Both reviewers' raw answers normalized to the identical canonical key set
+(Codex's wire-required null `blocked_reason` was omitted), with controller
+identity and time. REVISE from a live reviewer is shown in B2 below; REVISE and
+BLOCK normalization for both adapters is covered by unit tests.
 
 ### B. Rollover after a real Codex usage limit
 
@@ -88,6 +103,39 @@ not a simulation:
    `Autobuild-Implementer: claude` and `Autobuild-Rollover: codex -> claude
    (quota_exhausted)`; `main` `dc1dcf485c3e` unchanged. `autobuild evidence`
    verified both manifests and the handoff hash.
+
+### B2. Rollover during an open revision (induced session loss)
+
+`live-06-rollover-session-loss` (browser counter fixture, two-attempt review
+protocol), implementer Codex, reviewer Claude, rollover `max 1, automatic,
+[claude]`. To lose a session safely, the fixture's Codex command was a wrapper
+(kept in the fixture's `.git/`) that passes every call to the real Codex CLI
+unchanged, except that `exec … resume <id>` names an unknown thread. Codex itself
+then reported the lost session.
+
+1. Codex session `01a10ea4-71dd…` built the counter with the handler unwired
+   (protocol). Validation PASS; the real Playwright gate FAIL; fresh Claude
+   reviewer `5ca53def…` returned REVISE with blocker R1-1 ("Clicking Increment
+   changes the visible count from 0 to 1").
+2. Same-session resume of Codex failed with Codex's own error `thread/resume
+   failed: no rollout found for thread id …`, classified `session_unavailable`.
+3. Handoff `rollover/rollover-01/handoff.json`: failed attempt 2, review cycle 1,
+   rollover count 0/1, the Codex snapshot `44816e4a1939…` with `index.html`,
+   protected `main` `221bf7427c0b`, brief/config hashes, hashed attempt-1
+   validation (PASS), browser (FAIL) and review (REVISE), and the pending REVISE
+   review as an open finding.
+4. Claude session `812bce9c…` started as a new session ("You are a NEW
+   implementer session … none of its memory") with the full brief, the handoff
+   and R1-1. It kept Codex's markup and only wired the handler (8 lines added,
+   1 changed).
+5. Fresh evidence for attempt 3 on new snapshot `8746fe48eec7…`: confined
+   validation PASS, Playwright PASS (screenshot shows count 1), fresh Claude
+   reviewer `f13585a5…` PASS linked to `validation/cycle-03` and
+   `browser/cycle-03`. Attempt-1 evidence stayed as history.
+6. Checkpoint `efff14bbb41f` with `Autobuild-Implementer: claude` and
+   `Autobuild-Rollover: codex -> claude (session_unavailable)`; `main` unchanged.
+   `revision_history` shows initial (Codex) → resume (Codex, failed) → rollover
+   (Claude), and `autobuild evidence` verified all four manifests and the handoff.
 
 ### C. Rollover failure fails closed
 
@@ -118,3 +166,16 @@ Both used the same real Codex usage-limit failure:
   the failed implementer left in the worktree, including its mistakes.
 - Claude usage-limit and context-exhaustion messages could not be produced
   live; their patterns follow known Claude Code wording and are unit-tested only.
+- B2's session loss was induced (unknown thread id through a wrapper), not a
+  natural expiry; the error text and every controller step were real.
+- `approval: human` and the resume re-decision path are covered by unit tests,
+  not a live run.
+
+## Status
+
+0.6 is complete: both reviewers work in all four pairings, and rollover was
+proven live after a real quota failure (B) and during an open revision with
+partial work and an open finding (B2), with fail-closed behavior for an
+unavailable replacement and an unsupported transition (C). After every run no
+validation/browser process or temporary root remained, and no fixture `main`
+moved.

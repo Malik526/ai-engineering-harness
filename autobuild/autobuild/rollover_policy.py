@@ -24,6 +24,7 @@ class RolloverDecision:
     allowed: bool
     replacement: Optional[str]
     reason: str
+    code: str = ""  # why not: not_eligible | not_configured | budget | unsupported | unavailable
 
 
 def settings(config_data: dict[str, Any]) -> dict[str, Any]:
@@ -60,13 +61,14 @@ def decide(config_data: dict[str, Any], failure: ProviderFailure, failed_provide
            health: HealthCheck) -> RolloverDecision:
     policy = settings(config_data)
     if not failure.rollover_eligible:
-        return RolloverDecision(False, None, f"{failure.kind} is not a rollover trigger")
+        return RolloverDecision(False, None, f"{failure.kind} is not a rollover trigger", "not_eligible")
     if policy["max_rollovers"] == 0:
-        return RolloverDecision(False, None, "rollover is not configured for this project")
+        return RolloverDecision(False, None, "rollover is not configured for this project", "not_configured")
     if failure.kind not in policy["on"]:
-        return RolloverDecision(False, None, f"rollover is not configured for {failure.kind}")
+        return RolloverDecision(False, None, f"rollover is not configured for {failure.kind}", "not_configured")
     if executed >= policy["max_rollovers"]:
-        return RolloverDecision(False, None, f"rollover budget exhausted ({executed}/{policy['max_rollovers']})")
+        return RolloverDecision(False, None, f"rollover budget exhausted ({executed}/{policy['max_rollovers']})",
+                                "budget")
     rejected, unavailable = [], []
     for candidate in policy["implementer"]:
         problem = transition_error(config_data, failure.kind, failed_provider, candidate)
@@ -80,5 +82,6 @@ def decide(config_data: dict[str, Any], failure: ProviderFailure, failed_provide
         return RolloverDecision(True, candidate,
                                 f"{failed_provider} {failure.kind}; configured rollover selects {candidate}")
     if unavailable:
-        return RolloverDecision(False, None, "no configured replacement implementer is available: " + "; ".join(unavailable))
-    return RolloverDecision(False, None, "unsupported provider transition: " + "; ".join(rejected))
+        return RolloverDecision(False, None, "no configured replacement implementer is available: "
+                                + "; ".join(unavailable), "unavailable")
+    return RolloverDecision(False, None, "unsupported provider transition: " + "; ".join(rejected), "unsupported")

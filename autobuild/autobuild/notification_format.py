@@ -13,16 +13,26 @@ def _bullets(items: list[str], empty: str) -> str:
     return "\n".join(f"• {item}" for item in items) if items else empty
 
 
+_EVENT_TITLES = {
+    "completed": "COMPLETED", "failed": "FAILED", "blocked": "BLOCKED", "stopped": "STOPPED",
+    "human_action_required": "NEEDS YOU", "budget_exhausted": "BUDGET STOP", "rollover": "PROVIDER ROLLOVER",
+}
+
+
 def _validation_text(v: dict[str, Any]) -> str:
-    lines = [
-        f"{v['tests_passed']} tests passed, {v['tests_failed']} failed",
-        f"{v['browser_checks_passed']} browser checks passed, {v['browser_checks_failed']} failed",
-    ]
+    lines = [f"{v['commands_passed']} validation command(s) passed, {v['commands_failed']} failed"]
     if v["failed_commands"]:
         lines.append("Failed: " + ", ".join(v["failed_commands"]))
     if not v["authoritative"]:
         lines.append("(reported by the implementer, not re-run by the controller)")
     return "\n".join(lines)
+
+
+def _browser_text(b: Any) -> str:
+    if b is None:
+        return "No browser gates"
+    verdict = "PASSED" if b["passed"] else "NOT PASSED"
+    return f"{verdict} ({b['gates_passed']} gates passed, {b['gates_failed']} failed)"
 
 
 def _review_text(r: dict[str, Any]) -> str:
@@ -47,9 +57,18 @@ def format_notification(payload: dict[str, Any]) -> str:
         project=payload["project"],
         implementation_id=payload["implementation"]["id"],
         implementation_title=payload["implementation"]["title"],
+        event_title=_EVENT_TITLES[payload["event"]],
         status=payload["status"],
+        stop_reason=(f"\nStop reason: {payload['stop_reason']['code']} — {payload['stop_reason']['detail']}"
+                     if payload["stop_reason"] else ""),
         summary=payload["summary"] or "—",
+        implementer=payload["providers"]["implementer"] or "—",
+        reviewer=payload["providers"]["reviewer"] or "—",
+        attempts=payload["counts"]["implementation_attempts"],
+        cycles=payload["counts"]["review_cycles"],
+        rollovers=payload["counts"]["rollovers"],
         validation=_validation_text(payload["validation"]),
+        browser=_browser_text(payload["browser"]),
         review=_review_text(payload["review"]),
         fixes=_bullets(payload["review"]["fixes"], "None"),
         branch=payload["branch"] or "—",

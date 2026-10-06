@@ -91,6 +91,21 @@ and an exclusive run lock prevents concurrent controllers. Resume never reuses
 old normal/browser evidence for changed source or automatically clears a human
 gate. See ADRs 0003 through 0005.
 
+## Run Governance (0.7)
+
+A run can no longer continue just because a model keeps trying. The controller
+enforces runtime, revision, review, rollover, validation, browser and token
+budgets before each operation, and stops a running provider from outside its
+process when the runtime budget ends or a remote stop arrives. Every governed
+stop preserves the branch, worktree, uncommitted changes and evidence, records
+a canonical `stop_reason`, makes no checkpoint, and notifies the operator.
+Budgets change only by explicit human override on resume, recorded in the run.
+Notification delivery is best-effort and can never alter the persisted state.
+
+Limits: validation and browser commands are not interrupted mid-command (they
+have their own timeouts); token usage is provider-reported and checked between
+operations; the only stop channel is a local file (`autobuild stop`).
+
 ## Provider Rollover (0.6)
 
 Rollover changes who implements, never what counts as evidence. It is opt-in

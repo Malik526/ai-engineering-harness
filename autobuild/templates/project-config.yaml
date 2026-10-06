@@ -39,11 +39,16 @@ paths:                       # repository-relative
   adr_directory: docs/decisions
   runs_directory: .autobuild/runs
 
-limits:
+limits:                      # governance: checked by the controller before every agent/tool operation
   max_review_cycles: 3
   max_consecutive_implementations: 5
   implementer_timeout_seconds: 3600
   reviewer_timeout_seconds: 3600
+  # max_runtime_minutes: 120       # active controller time; a running provider is stopped at the limit
+  # max_revision_attempts: 4       # implementer invocations after the first (revisions, resumes, rollover)
+  # max_validation_attempts: 6
+  # max_browser_attempts: 6
+  # max_usage_tokens: 5000000      # provider-reported tokens; needs providers that report usage
 
 validation:
   browser_tool: none         # none | playwright | agent-browser
@@ -60,8 +65,15 @@ validation:
 
 notifications:
   enabled: false
-  provider: console          # console | file | email
+  provider: console          # console | file (run/notifications/) | email
+  # email:                   # required for provider: email; credentials only via environment variables
+  #   to: [you@example.com]
+  #   from: autobuild@example.com
+  #   smtp_host: smtp.example.com
+  #   security: starttls     # starttls | ssl | none
+  #   username_env: AUTOBUILD_SMTP_USER
+  #   password_env: AUTOBUILD_SMTP_PASSWORD
 
 control:
   remote_stop_enabled: false
-  provider: none             # none | file | github | supabase
+  provider: none             # none | file (autobuild stop RUN); github/supabase are not implemented

@@ -6,8 +6,8 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "run_id", "project", "implementation", "status", "summary", "validation", "review",
-    "branch", "commit", "next_step", "human_action", "protected_branches"
+    "run_id", "project", "implementation", "event", "status", "stop_reason", "summary", "providers", "counts",
+    "validation", "browser", "review", "branch", "commit", "next_step", "human_action", "protected_branches"
   ],
   "properties": {
     "run_id": { "type": "string", "minLength": 1 },
@@ -21,25 +21,76 @@
         "title": { "type": "string", "minLength": 1 }
       }
     },
+    "event": {
+      "description": "Why the operator is being told now. Chosen by the controller from the run state and stop reason.",
+      "enum": ["completed", "failed", "blocked", "human_action_required", "budget_exhausted", "stopped", "rollover"]
+    },
     "status": {
       "enum": [
         "IDLE", "PLANNING", "READY", "IMPLEMENTING", "VALIDATING", "REVIEWING", "REVISING",
         "PASSED", "HUMAN_BLOCKED", "FAILED", "STOP_REQUESTED", "STOPPED", "COMPLETED"
       ]
     },
+    "stop_reason": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["code", "detail"],
+          "properties": {
+            "code": { "type": "string", "minLength": 1 },
+            "detail": { "type": "string" }
+          }
+        }
+      ]
+    },
     "summary": { "type": "string" },
+    "providers": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["implementer", "reviewer"],
+      "properties": {
+        "implementer": { "type": ["string", "null"] },
+        "reviewer": { "type": ["string", "null"] }
+      }
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["implementation_attempts", "review_cycles", "rollovers"],
+      "properties": {
+        "implementation_attempts": { "type": "integer", "minimum": 0 },
+        "review_cycles": { "type": "integer", "minimum": 0 },
+        "rollovers": { "type": "integer", "minimum": 0 }
+      }
+    },
     "validation": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["authoritative", "tests_passed", "tests_failed", "browser_checks_passed", "browser_checks_failed", "failed_commands"],
+      "required": ["authoritative", "commands_passed", "commands_failed", "failed_commands"],
       "properties": {
         "authoritative": { "type": "boolean" },
-        "tests_passed": { "type": "integer", "minimum": 0 },
-        "tests_failed": { "type": "integer", "minimum": 0 },
-        "browser_checks_passed": { "type": "integer", "minimum": 0 },
-        "browser_checks_failed": { "type": "integer", "minimum": 0 },
+        "commands_passed": { "type": "integer", "minimum": 0 },
+        "commands_failed": { "type": "integer", "minimum": 0 },
         "failed_commands": { "type": "array", "items": { "type": "string" } }
       }
+    },
+    "browser": {
+      "description": "Latest controller browser evidence; null when the run has none.",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["passed", "gates_passed", "gates_failed"],
+          "properties": {
+            "passed": { "type": "boolean" },
+            "gates_passed": { "type": "integer", "minimum": 0 },
+            "gates_failed": { "type": "integer", "minimum": 0 }
+          }
+        }
+      ]
     },
     "review": {
       "type": "object",
@@ -47,8 +98,8 @@
       "required": ["cycles", "initial_status", "final_status", "fixes"],
       "properties": {
         "cycles": { "type": "integer", "minimum": 0 },
-        "initial_status": { "enum": ["PASS", "REVISE", "BLOCKED", null] },
-        "final_status": { "enum": ["PASS", "REVISE", "BLOCKED", null] },
+        "initial_status": { "enum": ["PASS", "REVISE", "BLOCK", "BLOCKED", null] },
+        "final_status": { "enum": ["PASS", "REVISE", "BLOCK", "BLOCKED", null] },
         "fixes": { "type": "array", "items": { "type": "string" } }
       }
     },

@@ -1,4 +1,4 @@
-# Confined Validation, Independent Review And Rollover Runner (Phase 0.6)
+# Governed Runner: Confined Validation, Independent Review, Rollover (Phase 0.7)
 
 `autobuild run` takes one approved brief through implementation and review and stops
 for the human:
@@ -27,6 +27,9 @@ cd <project>
 ~/.agents/autobuild/bin/autobuild run docs/roadmap/M4.2.md --yes --base agent/M4.1-auth
 ~/.agents/autobuild/bin/autobuild resume <run-id-or-directory> --dry-run
 ~/.agents/autobuild/bin/autobuild resume <run-id-or-directory>
+~/.agents/autobuild/bin/autobuild resume <run-id-or-directory> --override-limits   # after raising a budget
+~/.agents/autobuild/bin/autobuild stop <run-id-or-directory> [--reason TEXT]       # safe remote stop (control.provider file)
+~/.agents/autobuild/bin/autobuild stop <run-id-or-directory> --clear               # withdraw a pending stop
 ~/.agents/autobuild/bin/autobuild evidence <run-directory> --attempt 2
 ```
 
@@ -159,8 +162,8 @@ Autobuild, manual development never commits automatically
 | --- | --- |
 | `COMPLETED` | Controller validation and independent review passed; checkpointed if eligible. Human owns merge |
 | `FAILED` | Provider crash or timeout, no changes, agent commit, branch/ref/evidence tampering, secret-like files, or controller error. `failure.reason` names which |
-| `HUMAN_BLOCKED` | Review BLOCK/budget, required validation/browser non-PASS plus reviewer PASS, missing browser coverage, or an implementer provider/session failure whose rollover is blocked or awaits approval. No non-PASS evidence can checkpoint |
-| `STOPPED` | Ctrl-C: the provider process group is terminated and the state recorded. Remote stop is a later phase |
+| `HUMAN_BLOCKED` | Review BLOCK/budget, required validation/browser non-PASS plus reviewer PASS, missing browser coverage, an exhausted governance budget, or an implementer provider/session failure whose rollover is blocked or awaits approval. No non-PASS evidence can checkpoint |
+| `STOPPED` | Remote stop (`autobuild stop`) or Ctrl-C: the provider process group is terminated, the request acknowledged and the state recorded |
 
 Every run ends with a summary (also saved as `report.md`): implementation,
 active implementer (and whom it took over from), reviewer, status, branch,
@@ -204,8 +207,10 @@ resumes the implementer, then validates and uses a new reviewer.
 Preflight verifies the frozen brief hash, recorded branch/HEAD/repository,
 protected refs, artifact presence, no Git operation/secret-like changes, and
 configured providers. Execution configuration must match the frozen copy;
-only `max_review_cycles` can change. Exhausted budgets require an explicit
-human increase (schema maximum 10); prior cycles are never reset. A surviving
+only governance budgets (`limits.max_*`, `rollover.max_rollovers`) can change,
+and only with `--override-limits`; each override is recorded in
+`state.governance.overrides`. A budget that is already used up refuses to
+resume until it is raised and overridden; prior counters are never reset. A surviving
 `.controller.lock` must be investigated before a human removes it. Missing
 provider sessions are classified `session_unavailable`; without a configured
 rollover the run stops with a handoff, never a silent new session/provider.
@@ -255,6 +260,49 @@ A later REVISE resumes the *replacement's* session. A second eligible failure
 exceeds the budget and blocks. On resume, a `prepared` rollover executes after
 re-verification; a `blocked` one is decided again (for example if the
 replacement is installed now) and otherwise the original session continues.
+
+## Governance (0.7)
+
+Autonomy is bounded by deterministic, controller-owned limits. The controller
+checks them before **every** agent or tool operation (implementation,
+normal validation, browser gates, review) and records every operation's timing
+and provider-reported usage in `state.governance`:
+
+| Limit | Counts | Stop reason |
+| --- | --- | --- |
+| `limits.max_runtime_minutes` | active controller time over all sessions (not time blocked on a human) | `runtime_budget_exhausted` |
+| `limits.max_review_cycles` | reviewer invocations | `review_budget_exhausted` |
+| `limits.max_revision_attempts` | implementer invocations after the first (revision, resume or rollover takeover) | `revision_budget_exhausted` |
+| `rollover.max_rollovers` | executed rollovers | `rollover_budget_exhausted` |
+| `limits.max_validation_attempts` | confined normal-validation runs | `validation_budget_exhausted` |
+| `limits.max_browser_attempts` | browser-gate runs | `browser_budget_exhausted` |
+| `limits.max_usage_tokens` | provider-reported tokens (input incl. cache + output) | `usage_budget_exhausted` |
+
+Only review cycles are mandatory; an absent limit is unlimited. While an
+implementer or reviewer runs, a watchdog terminates its process group when the
+runtime budget runs out or a remote stop arrives (`CONTROL_CONTRACT.md`).
+Usage is known only after an operation, so one in flight can overshoot the
+token budget; a provider that reports no usage is listed as such, and a usage
+budget is refused at preflight unless every configured provider reports usage.
+Provider cost is recorded only when the provider reports it (Claude), and is
+informational: no cost is estimated.
+
+A budget stop ends `HUMAN_BLOCKED` with `stop_reason` naming the limit, its
+value and use, preserves the branch, worktree, uncommitted changes and all
+evidence, makes no new checkpoint, and notifies `budget_exhausted`. Continuing
+requires raising the limit and `autobuild resume RUN --override-limits`.
+Preflight rejects impossible combinations (a rollover with zero revision
+attempts, an unimplemented stop provider, an email notifier without settings)
+and warns when the runtime budget is shorter than one implementer timeout.
+
+Every finished run has exactly one `stop_reason` (`stop_reasons.py`):
+`completed`, `human_blocked`, `remote_stop`, `interrupted`, one of the budget
+codes above, `provider_failure`, `validation_failure`, `browser_failure`,
+`safety_violation`, `no_changes` or `unknown_failure`. A blocked rollover is
+`rollover_budget_exhausted` only when the budget was the cause; an unavailable
+or disallowed replacement is `provider_failure`. The report shows the stop
+reason, every budget against its limit, time by phase and by provider, and any
+limit overrides.
 
 ## Live Verification Fixtures
 

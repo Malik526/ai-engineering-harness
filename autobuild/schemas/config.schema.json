@@ -117,6 +117,26 @@
         "reviewer_timeout_seconds": {
           "description": "Wall-clock limit for one fresh reviewer invocation. Defaults to 3600.",
           "type": "integer", "minimum": 60, "maximum": 86400
+        },
+        "max_runtime_minutes": {
+          "description": "Governance: active controller time across all sessions of a run (time blocked waiting for a human does not count). A running provider is terminated at the limit. Absent = unlimited.",
+          "type": "integer", "minimum": 1, "maximum": 10080
+        },
+        "max_revision_attempts": {
+          "description": "Governance: implementer invocations after the first (same-session revisions, resumes and rollover takeovers). Absent = bounded only by review cycles.",
+          "type": "integer", "minimum": 0, "maximum": 50
+        },
+        "max_validation_attempts": {
+          "description": "Governance: confined normal-validation executions per run. Absent = unlimited.",
+          "type": "integer", "minimum": 1, "maximum": 100
+        },
+        "max_browser_attempts": {
+          "description": "Governance: controller browser-gate executions per run. Absent = unlimited.",
+          "type": "integer", "minimum": 1, "maximum": 100
+        },
+        "max_usage_tokens": {
+          "description": "Governance: provider-reported tokens (input incl. cache + output) across every agent invocation. Checked before each operation; one in flight may overshoot. Requires providers that report usage.",
+          "type": "integer", "minimum": 1000, "maximum": 10000000000
         }
       }
     },
@@ -150,8 +170,25 @@
       "required": ["enabled", "provider"],
       "properties": {
         "enabled": { "type": "boolean" },
-        "provider": { "enum": ["console", "file", "email"] }
-      }
+        "provider": { "enum": ["console", "file", "email"] },
+        "email": {
+          "description": "SMTP delivery. Credentials are read from the named environment variables, never stored here.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["to", "from", "smtp_host"],
+          "properties": {
+            "to": { "type": "array", "minItems": 1, "items": { "type": "string", "pattern": "^[^@\\s]+@[^@\\s]+$" } },
+            "from": { "type": "string", "pattern": "^[^@\\s]+@[^@\\s]+$" },
+            "smtp_host": { "type": "string", "minLength": 1 },
+            "smtp_port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+            "security": { "enum": ["starttls", "ssl", "none"] },
+            "username_env": { "type": "string", "pattern": "^[A-Z_][A-Z0-9_]*$" },
+            "password_env": { "type": "string", "pattern": "^[A-Z_][A-Z0-9_]*$" }
+          }
+        }
+      },
+      "if": { "properties": { "provider": { "const": "email" }, "enabled": { "const": true } } },
+      "then": { "required": ["email"] }
     },
     "control": {
       "type": "object",

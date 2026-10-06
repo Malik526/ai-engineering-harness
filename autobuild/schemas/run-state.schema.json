@@ -148,6 +148,89 @@
         }
       }
     },
+    "governance": {
+      "description": "Controller accounting for budgets (0.7): controller sessions, every agent/tool operation, and human limit overrides.",
+      "type": "object", "additionalProperties": false, "required": ["segments", "operations", "overrides"],
+      "properties": {
+        "segments": {
+          "description": "One per controller session (run or resume). active_seconds is updated after every operation.",
+          "type": "array", "items": {
+            "type": "object", "additionalProperties": false, "required": ["started_at", "ended_at", "active_seconds"],
+            "properties": {
+              "started_at": { "$ref": "#/$defs/timestamp" },
+              "ended_at": { "oneOf": [{ "$ref": "#/$defs/timestamp" }, { "type": "null" }] },
+              "active_seconds": { "type": "number", "minimum": 0 }
+            }
+          }
+        },
+        "operations": {
+          "type": "array", "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["kind", "attempt", "provider", "session_id", "started_at", "ended_at", "duration_seconds", "usage"],
+            "properties": {
+              "kind": { "enum": ["implementation", "validation", "browser", "review"] },
+              "attempt": { "type": "integer", "minimum": 1 },
+              "provider": { "oneOf": [{ "$ref": "#/$defs/provider_id" }, { "type": "null" }] },
+              "session_id": { "type": ["string", "null"] },
+              "started_at": { "$ref": "#/$defs/timestamp" },
+              "ended_at": { "$ref": "#/$defs/timestamp" },
+              "duration_seconds": { "type": "number", "minimum": 0 },
+              "usage": {
+                "description": "Provider-reported tokens, normalized (input includes cached input). null when the provider reported none.",
+                "oneOf": [{ "type": "null" }, {
+                  "type": "object", "additionalProperties": false,
+                  "required": ["input_tokens", "output_tokens", "total_tokens"],
+                  "properties": {
+                    "input_tokens": { "type": "integer", "minimum": 0 },
+                    "output_tokens": { "type": "integer", "minimum": 0 },
+                    "total_tokens": { "type": "integer", "minimum": 0 },
+                    "provider_cost_usd": { "description": "Informational, only when the provider reports it.", "type": "number", "minimum": 0 }
+                  }
+                }]
+              }
+            }
+          }
+        },
+        "overrides": {
+          "description": "Budget changes a human applied on resume with --override-limits.",
+          "type": "array", "items": {
+            "type": "object", "additionalProperties": false, "required": ["at", "changes"],
+            "properties": {
+              "at": { "$ref": "#/$defs/timestamp" },
+              "changes": {
+                "type": "array", "minItems": 1, "items": {
+                  "type": "object", "additionalProperties": false, "required": ["key", "from", "to"],
+                  "properties": { "key": { "type": "string" }, "from": {}, "to": {} }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "stop_reason": {
+      "description": "Canonical reason the run ended (stop_reasons.py); null while running.",
+      "oneOf": [{ "type": "null" }, {
+        "type": "object", "additionalProperties": false, "required": ["code", "detail", "limit", "at"],
+        "properties": {
+          "code": {
+            "enum": ["completed", "human_blocked", "remote_stop", "interrupted", "runtime_budget_exhausted",
+                     "review_budget_exhausted", "revision_budget_exhausted", "rollover_budget_exhausted",
+                     "usage_budget_exhausted", "validation_budget_exhausted", "browser_budget_exhausted",
+                     "provider_failure", "validation_failure", "browser_failure", "safety_violation", "no_changes",
+                     "unknown_failure"]
+          },
+          "detail": { "type": "string" },
+          "limit": {
+            "oneOf": [{ "type": "null" }, {
+              "type": "object", "additionalProperties": false, "required": ["name", "limit", "used"],
+              "properties": { "name": { "type": "string" }, "limit": { "type": "number" }, "used": { "type": "number" } }
+            }]
+          },
+          "at": { "$ref": "#/$defs/timestamp" }
+        }
+      }]
+    },
     "final_review_status": { "enum": [null, "PASS", "REVISE", "BLOCK"] },
     "review_mode": {
       "description": "none = implementation-only run (phase 0.2), ends unreviewed and waits for the human; independent = the run must pass a fresh reviewer before completing.",

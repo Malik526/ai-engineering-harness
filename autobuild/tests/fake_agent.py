@@ -77,6 +77,12 @@ def main() -> int:
         Path("partial.txt").write_text("half-finished work\n")
         print("API Error: 529 overloaded", file=sys.stderr)
         return 1
+    if mode == "partial_sleep":
+        # Long-running provider with partial work, for stop/runtime tests; records its pid for liveness checks.
+        Path("partial.txt").write_text("partial work before the stop\n")
+        Path(os.environ.get("FAKE_PID_FILE", os.devnull)).write_text(str(os.getpid()))
+        time.sleep(120)
+        return 0
     if mode == "fail":
         Path("partial.txt").write_text("half-finished work\n")
         print("simulated provider crash", file=sys.stderr)

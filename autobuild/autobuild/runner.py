@@ -16,7 +16,9 @@ from autobuild.agent_provider import AgentRequest, AgentResult
 from autobuild.checkpoint_policy import decide_checkpoint
 from autobuild.git_client import GitClient
 from autobuild.git_evidence import GitEvidence, capture
+from autobuild.file_control import load_stop_controller
 from autobuild.git_shim import write_shim
+from autobuild.governance import Governor, StopDecision, _monotonic, empty_record
 from autobuild.handoff import build_handoff, handoff_errors, takeover_prompt
 from autobuild.paths import CORE_ROOT
 from autobuild.preflight import RunPlan
@@ -28,7 +30,10 @@ from autobuild.provider_registry import assignment_for
 from autobuild.rollover_policy import decide as decide_rollover, settings as rollover_settings
 from autobuild.review_contract import normalize_review
 from autobuild.review_prompt import review_prompt, revision_prompt
-from autobuild.run_report import format_report
+from autobuild.notification_payload import run_payload
+from autobuild.notifier import load_notifier
+from autobuild.run_report import format_report, next_step
+from autobuild import stop_reasons
 from autobuild.run_store import RunStore, close_logger, utc_now
 from autobuild.safety import is_protected_branch
 from autobuild.schemas import load_schema, schema_errors
@@ -68,6 +73,8 @@ class Runner:
         self.active_adapter = plan.adapter
         self.expected_head = plan.base_commit
         self.browser = None
+        self.governor: Optional[Governor] = None
+        self.pending_stop: Optional[StopDecision] = None  # set where the controller decides why it stops
 
     # --- Entry point ---
 
@@ -97,14 +104,16 @@ class Runner:
                 self.expected_head = persisted["last_commit"] or plan.base_commit
                 self.attempt = len(persisted.get("revision_history", []))
                 self.store.transition(RunState.READY, by_human=True, failure=None, human_gate=None,
-                                      stop_requested=False, final_review_status=None)
+                                      stop_requested=False, final_review_status=None, stop_reason=None)
             else:
                 self.store = RunStore.create(config=plan.config, run_dir=plan.run_dir, run_id=plan.run_id,
                                             implementation_id=plan.meta["id"], brief_path=plan.brief_path,
                                             review_mode="independent")
                 self.store.update(review_history=[], revision_history=[], validation_history=[], browser_history=[],
-                                  rollover_history=[], final_review_status=None)
+                                  rollover_history=[], final_review_status=None, governance=empty_record(),
+                                  stop_reason=None)
                 self._create_worktree()
+            self._start_governance()
             if plan.resume_rollover is not None:
                 self._resume_rollover(plan.resume_rollover)
             else:
@@ -116,10 +125,12 @@ class Runner:
                 review = self._review()
                 if review["status"] == "PASS":
                     if self.validation is None or not self.validation.passed:
-                        self._human_block("required normal validation did not PASS; reviewer cannot override controller evidence")
+                        self._human_block("required normal validation did not PASS; reviewer cannot override controller evidence",
+                                          code=stop_reasons.VALIDATION_FAILURE)
                         raise RunAborted
                     if self.browser is not None and not self.browser["passed"]:
-                        self._human_block("required browser gates did not PASS; reviewer cannot override controller evidence")
+                        self._human_block("required browser gates did not PASS; reviewer cannot override controller evidence",
+                                          code=stop_reasons.BROWSER_FAILURE)
                         raise RunAborted
                     self.store.transition(RunState.PASSED)
                     break
@@ -127,7 +138,8 @@ class Runner:
                     self._human_block(review["blocked_reason"])
                     raise RunAborted
                 if self.store.state["review_cycle"] >= plan.config.data["limits"]["max_review_cycles"]:
-                    self._human_block("maximum review cycles reached without PASS")
+                    self._human_block("maximum review cycles reached without PASS", code=stop_reasons.REVIEW_BUDGET,
+                                      limit=self._review_limit())
                     raise RunAborted
                 self.store.transition(RunState.REVISING)
                 self._implement(resume=True, review=review)
@@ -138,7 +150,7 @@ class Runner:
         except RunAborted:
             pass
         except KeyboardInterrupt:
-            self._stop()
+            self._stop(StopDecision(stop_reasons.INTERRUPTED, "controller interrupted (Ctrl-C)"), operation_running=True)
         except Exception as exc:  # noqa: BLE001 — every failure must end in a recorded state
             self.active_adapter.terminate()
             if self.store is None:
@@ -146,9 +158,7 @@ class Runner:
             self.store.log.error("unexpected error:\n%s", traceback.format_exc())
             if self.store.current not in (RunState.FAILED, RunState.STOPPED, RunState.COMPLETED, RunState.HUMAN_BLOCKED):
                 self.store.fail("controller_error", f"{type(exc).__name__}: {exc}")
-        report = format_report(self.store.state, self._result_doc(), self.evidence, self.validation, plan)
-        self.store.write_text("report.md", report)
-        return RunOutcome(state=self.store.state, run_dir=plan.run_dir, report=report)
+        return self._finalize()
 
     # --- Steps ---
 
@@ -175,6 +185,7 @@ class Runner:
     def _implement(self, *, resume: bool = False, review: Optional[dict] = None,
                    takeover: Optional[dict] = None) -> None:
         plan, store = self.plan, self.store
+        self._gate("implementation")
         self._verify_frozen_brief()
         self._verify_browser_history()
         self._verify_validation_history()
@@ -233,17 +244,21 @@ class Runner:
         store.log.info("invoking implementer %s (%s; %s)", self.implementer.provider, self.implementer.command, mode)
         adapter = self.implementer_adapter
         self.active_adapter = adapter
-        adapter.start(request)
-        try:
-            self.result = adapter.get_result()
-        except KeyboardInterrupt:
-            adapter.terminate()
-            raise
+        started_at, started = utc_now(), _monotonic()
+        with self.governor.watch(adapter):
+            adapter.start(request)
+            try:
+                self.result = adapter.get_result()
+            except KeyboardInterrupt:
+                adapter.terminate()
+                raise
         failure = self.result.failure if not self.result.succeeded else None
         session.update(session_id=self.result.session_id or session_id, ended_at=utc_now())
         history[-1].update(session_id=session["session_id"], ended_at=session["ended_at"],
                            failure=failure.as_record() if failure else None)
         store.update(agent_sessions=sessions, revision_history=history)
+        self._account("implementation", started_at, started, provider=self.implementer.provider,
+                      session_id=session["session_id"], usage=self.result.usage)
         store.write_json("implementation/result.json", self._result_doc())
         store.write_text("implementation/summary.md", _summary_markdown(self._result_doc()))
         for filename in ("result.json", "summary.md"):
@@ -255,6 +270,8 @@ class Runner:
         store.log.info("implementer ended: exit=%s timed_out=%s report=%s", self.result.exit_code,
                        self.result.timed_out, "valid" if self.result.structured_output else self.result.output_error)
         self._verify_protected_refs()
+        if self.governor.interrupted is not None:
+            self._governance_stop(self.governor.interrupted)
         if failure is not None and failure.rollover_eligible:
             self._rollover(failure)
             return
@@ -286,7 +303,9 @@ class Runner:
 
     def _validate(self) -> None:
         plan, store = self.plan, self.store
+        self._gate("validation")
         store.transition(RunState.VALIDATING)
+        started_at, started = utc_now(), _monotonic()
         self.validation = run_validation(run_id=plan.run_id, commands=plan.validation_commands,
                                          project_root=plan.project_root, worktree=plan.worktree,
                                          changed_files=self.evidence.changed_paths, run_dir=plan.run_dir,
@@ -306,6 +325,7 @@ class Runner:
             "passed": self.validation.passed,
         }]
         store.update(validation_history=history)
+        self._account("validation", started_at, started)
         self._verify_snapshot("validation")
 
     def _review(self) -> dict:
@@ -314,8 +334,10 @@ class Runner:
         self._verify_validation_history()
         cycle = store.state["review_cycle"] + 1
         if cycle > plan.config.data["limits"]["max_review_cycles"]:
-            self._human_block("maximum review cycles reached without PASS")
+            self._human_block("maximum review cycles reached without PASS", code=stop_reasons.REVIEW_BUDGET,
+                              limit=self._review_limit())
             raise RunAborted
+        self._gate("review")
         assignment = plan.reviewer_assignment or plan.config.agents[REVIEWER]
         plan.reviewer_assignment = assignment
         session_id = str(uuid.uuid4())
@@ -338,8 +360,10 @@ class Runner:
                                     "AUTOBUILD_REVIEW_CYCLE": str(cycle), "AUTOBUILD_SESSION_ID": session_id,
                                     "AUTOBUILD_REAL_GIT": shutil.which("git") or "git",
                                     "PATH": f"{store.path('guard/bin')}{os.pathsep}{os.environ.get('PATH', '')}"})
-        adapter.start(request)
-        result = adapter.get_result()
+        started_at, started = utc_now(), _monotonic()
+        with self.governor.watch(adapter):
+            adapter.start(request)
+            result = adapter.get_result()
         actual_id = result.session_id or session_id
         store.write_json(f"{prefix}-result.json", {"provider": result.provider, "session_id": actual_id,
                          "exit_code": result.exit_code, "timed_out": result.timed_out,
@@ -348,6 +372,10 @@ class Runner:
             self._abort("reviewer_session_reused", "reviewer reused an existing session", recoverable=False)
         session.update(session_id=actual_id, ended_at=utc_now())
         store.update(agent_sessions=sessions)
+        self._account("review", started_at, started, provider=assignment.provider, session_id=actual_id,
+                      usage=result.usage, attempt=cycle)
+        if self.governor.interrupted is not None:
+            self._governance_stop(self.governor.interrupted)
         self._verify_snapshot("reviewer")
         self._verify_browser_history()
         self._verify_validation_history()
@@ -386,8 +414,13 @@ class Runner:
         if after.snapshot_tree != self.evidence.snapshot_tree:
             self._abort(f"{role}_modified_worktree", f"{role} changed the implementation snapshot", recoverable=False)
 
-    def _human_block(self, reason: str) -> None:
+    def _human_block(self, reason: str, *, code: str = stop_reasons.HUMAN_BLOCKED,
+                     limit: Optional[dict] = None) -> None:
+        self.pending_stop = StopDecision(code, reason, limit)
         actions = ["Resolve the blocking condition, then explicitly run autobuild resume " + str(self.plan.run_dir)]
+        if code in stop_reasons.BUDGET_CODES and limit is not None:
+            actions = [f"Budget {limit['name']} is used up ({limit['used']} of {limit['limit']}). To continue, raise it "
+                       f"in .autobuild/config.yaml and run: autobuild resume {self.plan.run_dir} --override-limits"]
         if self.browser and any(g["id"] == "missing-browser-coverage" for g in self.browser["gates"]):
             actions = ["Configure enabled required browser gates and start a new run; "
                        "execution configuration is frozen for this preserved run"]
@@ -408,14 +441,14 @@ class Runner:
         self._verify_browser_history()
         self._verify_validation_history()
         if self.validation is None or not self.validation.passed:
-            self._human_block("required normal validation failed or is stale")
+            self._human_block("required normal validation failed or is stale", code=stop_reasons.VALIDATION_FAILURE)
             raise RunAborted
         if self.browser is None and (plan.browser_gate or plan.config.data["validation"].get("browser_gates")):
-            self._human_block("controller browser evidence is missing")
+            self._human_block("controller browser evidence is missing", code=stop_reasons.BROWSER_FAILURE)
             raise RunAborted
         if (self.browser is not None and (not self.browser["passed"] or
                 self.browser["snapshot_tree"] != self.evidence.snapshot_tree or self.browser["attempt"] != self.attempt)):
-            self._human_block("required browser evidence failed or is stale")
+            self._human_block("required browser evidence failed or is stale", code=stop_reasons.BROWSER_FAILURE)
             raise RunAborted
         self._verify_snapshot("checkpoint")
         decision = decide_checkpoint(
@@ -441,13 +474,21 @@ class Runner:
         self._verify_protected_refs()
         return commit
 
-    def _stop(self) -> None:
+    def _stop(self, decision: StopDecision, *, operation_running: bool = False) -> None:
+        """STOP_SEQUENCE: no new operation, terminate the current one, persist and preserve everything.
+
+        `operation_running` is true only for an interrupt that arrives mid-operation; governance stops
+        happen at a boundary or after the watchdog already ended the operation and recorded its result.
+        """
         store = self.store
-        store.log.warning("stop requested (interrupt)")
+        self.pending_stop = decision
+        store.log.warning("stop: %s (%s)", decision.code, decision.detail)
         self.active_adapter.terminate()
         # A terminated provider can still have emitted its actual session ID.
         # Preserve it for explicit resume rather than relying on the provisional UUID.
         try:
+            if not operation_running:
+                raise LookupError("no operation in flight")
             result = self.active_adapter.get_result()
             sessions = copy.deepcopy(store.state["agent_sessions"])
             if sessions and result.session_id:
@@ -460,6 +501,8 @@ class Runner:
                     fields["revision_history"] = history
                     store.write_json(f"implementation/cycle-{self.attempt:02d}/result.json", self._result_doc())
                 store.update(**fields)
+        except LookupError:
+            pass
         except (Exception, KeyboardInterrupt):
             store.log.warning("could not recover a final provider result after interrupt; raw logs preserved")
         if store.current in (RunState.FAILED, RunState.COMPLETED, RunState.STOPPED):
@@ -467,6 +510,110 @@ class Runner:
         if store.current is not RunState.STOP_REQUESTED:
             store.transition(RunState.STOP_REQUESTED, stop_requested=True)
         store.transition(RunState.STOPPED)
+        controller = self.governor.stop_controller if self.governor else None
+        if decision.code == stop_reasons.REMOTE_STOP and controller is not None and self.governor.stop_request:
+            controller.acknowledge_stop(self.governor.stop_request)
+
+    # --- Governance ---
+
+    def _start_governance(self) -> None:
+        """Open this controller session's accounting segment and record any human limit override."""
+        plan, store = self.plan, self.store
+        record = copy.deepcopy(store.state.get("governance") or empty_record())
+        if plan.limit_overrides:
+            record["overrides"].append({"at": utc_now(), "changes": plan.limit_overrides})
+            store.log.warning("human limit override: %s", plan.limit_overrides)
+        self.governor = Governor(plan.config.data, load_stop_controller(plan.config.data, plan.run_dir), plan.run_id)
+        self.governor.start_segment(record)
+        record["segments"].append({"started_at": utc_now(), "ended_at": None, "active_seconds": 0})
+        store.update(governance=record)
+
+    def _gate(self, kind: str) -> None:
+        """Refuse to start a `kind` operation when a stop was requested or a budget is used up."""
+        decision = self.governor.check(kind, self.store.state)
+        if decision is not None:
+            self._governance_stop(decision)
+
+    def _governance_stop(self, decision: StopDecision) -> None:
+        if decision.code == stop_reasons.REMOTE_STOP:
+            self._stop(decision)
+        else:
+            self._human_block(decision.detail, code=decision.code, limit=decision.limit)
+        raise RunAborted
+
+    def _account(self, kind: str, started_at: str, started: float, *, provider: Optional[str] = None,
+                 session_id: Optional[str] = None, usage: Optional[dict] = None, attempt: Optional[int] = None) -> None:
+        record = copy.deepcopy(self.store.state["governance"])
+        record["operations"].append({"kind": kind, "attempt": attempt or self.attempt, "provider": provider,
+                                     "session_id": session_id, "started_at": started_at, "ended_at": utc_now(),
+                                     "duration_seconds": round(_monotonic() - started, 3), "usage": usage})
+        record["segments"][-1]["active_seconds"] = round(self.governor.session_seconds(), 3)
+        self.store.update(governance=record)
+
+    def _review_limit(self) -> dict:
+        limit = self.plan.config.data["limits"]["max_review_cycles"]
+        return {"name": "limits.max_review_cycles", "limit": limit, "used": self.store.state["review_cycle"]}
+
+    def _finalize(self) -> RunOutcome:
+        """Close accounting, record why the run ended, write the report, then notify (never blocking)."""
+        plan, store = self.plan, self.store
+        try:
+            fields = {}
+            record = copy.deepcopy(store.state.get("governance"))
+            if record and record["segments"] and self.governor is not None:
+                record["segments"][-1].update(ended_at=utc_now(), active_seconds=round(self.governor.session_seconds(), 3))
+                fields["governance"] = record
+            if store.state.get("stop_reason") is None:
+                derived = stop_reasons.derive(store.state)
+                if derived is not None and self.pending_stop is not None and store.current in (
+                        RunState.HUMAN_BLOCKED, RunState.STOPPED):
+                    derived = {"code": self.pending_stop.code, "detail": self.pending_stop.detail,
+                               "limit": self.pending_stop.limit}
+                if derived is not None:
+                    fields["stop_reason"] = {**derived, "at": utc_now()}
+            if fields:
+                store.update(**fields)
+        except Exception:  # noqa: BLE001 — accounting must never cost the report or the preserved state
+            store.log.error("could not finalize governance record:\n%s", traceback.format_exc())
+        if self.evidence is None and store.state.get("worktree") and Path(store.state["worktree"]).is_dir():
+            try:  # show what a stopped/blocked run preserved, from a controller snapshot (not an agent claim)
+                self.evidence = capture(self.git, plan.worktree, plan.run_dir, plan.base_commit,
+                                        out=plan.run_dir / "checks/final")
+            except Exception:  # noqa: BLE001
+                store.log.warning("could not snapshot the preserved worktree for the report")
+        report = format_report(store.state, self._result_doc(), self.evidence, self.validation, plan)
+        store.write_text("report.md", report)
+        if store.current in (RunState.COMPLETED, RunState.HUMAN_BLOCKED, RunState.FAILED, RunState.STOPPED):
+            self._notify(summary=self._final_summary())
+        return RunOutcome(state=store.state, run_dir=plan.run_dir, report=report)
+
+    def _final_summary(self) -> str:
+        if self.evidence is None:
+            return "No implementation changes were captured."
+        paths = self.evidence.changed_paths
+        shown = ", ".join(paths[:5]) + (f" and {len(paths) - 5} more" if len(paths) > 5 else "")
+        return f"{len(paths)} file(s) changed: {shown}" if paths else "No files changed."
+
+    def _notify(self, *, summary: str, event: Optional[str] = None, implementer: Optional[str] = None) -> None:
+        """Deliver a structured notification. Failures are logged and recorded, never raised."""
+        plan, store = self.plan, self.store
+        try:
+            notifier = load_notifier(plan.config.data, plan.run_dir)
+            if notifier is None:
+                return
+            payload = run_payload(run_dir=plan.run_dir, state=store.state, project=plan.config.name,
+                                  implementation={"id": plan.meta["id"], "title": plan.meta["title"]},
+                                  protected_branches=plan.config.protected_branches,
+                                  protected_now=self.git.protected_refs(), summary=summary, event=event,
+                                  next_action=None if event else next_step(store.state, plan), implementer=implementer)
+            notifier.send(payload)
+            store.log.info("notification sent: %s via %s", payload["event"], plan.config.data["notifications"]["provider"])
+        except Exception as exc:  # noqa: BLE001 — delivery must never affect the run's preserved state
+            store.log.error("notification delivery failed: %s: %s", type(exc).__name__, exc)
+            failures = plan.run_dir / "notifications" / "delivery-failures.log"
+            failures.parent.mkdir(parents=True, exist_ok=True)
+            with failures.open("a") as log:
+                log.write(f"{utc_now()} {event or 'final'}: {type(exc).__name__}: {exc}\n")
 
     # --- Rollover ---
 
@@ -505,8 +652,13 @@ class Runner:
         store.log.warning("implementer %s failed (%s: %s); rollover %s: %s", from_provider, failure.kind,
                           failure.detail, record["status"], decision.reason)
         if not decision.allowed:
+            budget = decision.code == "budget"
+            executed_limit = {"name": "rollover.max_rollovers", "used": executed,
+                              "limit": rollover_settings(plan.config.data)["max_rollovers"]}
             self._human_block(f"implementer {from_provider} failed ({failure.kind}); rollover blocked: "
-                              f"{decision.reason}. Work and handoff preserved: {plan.run_dir / artifact}")
+                              f"{decision.reason}. Work and handoff preserved: {plan.run_dir / artifact}",
+                              code=stop_reasons.ROLLOVER_BUDGET if budget else stop_reasons.PROVIDER_FAILURE,
+                              limit=executed_limit if budget else None)
             raise RunAborted
         if approval == "human" and not approved:
             self._human_block(f"implementer {from_provider} failed ({failure.kind}); rollover to "
@@ -533,7 +685,8 @@ class Runner:
             self._mark_rollover(record["index"], status="blocked",
                                 reason=f"replacement {record['to_provider']} unavailable at takeover: "
                                        f"{detail if health is None else health.detail}")
-            self._human_block(f"rollover replacement {record['to_provider']} is unavailable; work and handoff preserved")
+            self._human_block(f"rollover replacement {record['to_provider']} is unavailable; work and handoff preserved",
+                              code=stop_reasons.PROVIDER_FAILURE)
             raise RunAborted
         handoff = json.loads((plan.run_dir / record["handoff_artifact"]).read_text())
         pending = handoff["pending_review"]
@@ -543,6 +696,9 @@ class Runner:
                           record["from_provider"], record["to_provider"], record["failure"]["kind"],
                           record["handoff_artifact"])
         self.implementer, self.implementer_adapter = assignment, adapter
+        self._notify(event="rollover", summary=f"{record['from_provider']} stopped ({record['failure']['kind']}); "
+                                               f"{record['to_provider']} takes over through {record['handoff_artifact']}",
+                     implementer=record["to_provider"])
         self._implement(takeover={"handoff": handoff, "review": review})
 
     def _resume_rollover(self, action: dict) -> None:
@@ -562,6 +718,9 @@ class Runner:
 
     def _browser(self) -> None:
         plan, store = self.plan, self.store
+        if plan.browser_gate or plan.config.data["validation"].get("browser_gates"):
+            self._gate("browser")
+        started_at, started = utc_now(), _monotonic()
         self.browser = run_browser(run_id=plan.run_id, attempt=self.attempt,
                                   review_cycle=store.state["review_cycle"] + 1, worktree=plan.worktree,
                                   head_commit=self.evidence.head_commit, snapshot_tree=self.evidence.snapshot_tree,
@@ -574,6 +733,7 @@ class Runner:
                       "sha256": digest(store.path(artifact)), "snapshot_tree": self.evidence.snapshot_tree,
                       "passed": self.browser["passed"]}
             store.update(browser_history=store.state.get("browser_history", []) + [record])
+            self._account("browser", started_at, started)
             self._verify_snapshot("browser")
         if self.validation is not None:
             self.validation.cleanup()
@@ -604,7 +764,8 @@ class Runner:
                 and reason in ("reviewer_failed", "reviewer_unavailable", "invalid_review")
                 and self.store.state["review_cycle"] >= self.plan.config.max_review_cycles):
             self.store.log.error("review budget exhausted (%s): %s", reason, detail)
-            self._human_block("maximum review cycles reached without PASS; " + reason + ": " + detail)
+            self._human_block("maximum review cycles reached without PASS; " + reason + ": " + detail,
+                              code=stop_reasons.REVIEW_BUDGET, limit=self._review_limit())
             raise RunAborted
         self.store.fail(reason, detail, recoverable=recoverable)
         raise RunAborted

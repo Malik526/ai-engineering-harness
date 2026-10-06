@@ -139,6 +139,17 @@ def _rollover_line(config_data: dict) -> str:
             f"approval {policy['approval']}; on {', '.join(policy['on'])}")
 
 
+def _governance_line(config_data: dict) -> str:
+    limits, control, notify = config_data["limits"], config_data["control"], config_data["notifications"]
+    names = [("max_runtime_minutes", "runtime min"), ("max_review_cycles", "review cycles"),
+             ("max_revision_attempts", "revisions"), ("max_validation_attempts", "validation runs"),
+             ("max_browser_attempts", "browser runs"), ("max_usage_tokens", "tokens")]
+    shown = [f"{label} {limits[key]}" for key, label in names if limits.get(key) is not None]
+    stop = control["provider"] if control["remote_stop_enabled"] else "disabled"
+    sends = notify["provider"] if notify["enabled"] else "disabled"
+    return f"{'; '.join(shown)}; remote stop {stop}; notifications {sends}"
+
+
 def _run(brief: Path, project: Optional[Path], base: Optional[str], assume_yes: bool, dry_run: bool) -> int:
     from autobuild.git_client import GitClient
     from autobuild.preflight import PreflightError, preflight
@@ -159,6 +170,7 @@ def _run(brief: Path, project: Optional[Path], base: Optional[str], assume_yes: 
     print(f"Implementer: {plan.assignment.provider} ({plan.assignment.display_name}, {plan.health.version or 'version unknown'})")
     print(f"Reviewer: {plan.reviewer_assignment.provider} (fresh session each cycle)")
     print(f"Rollover: {_rollover_line(plan.config.data)}")
+    print(f"Governance: {_governance_line(plan.config.data)}")
     print(f"Base branch: {plan.base_branch} @ {plan.base_commit[:12]}")
     print(f"Target branch: {plan.branch}")
     print(f"Worktree: {plan.worktree}")
@@ -180,7 +192,7 @@ def _run(brief: Path, project: Optional[Path], base: Optional[str], assume_yes: 
     return 0 if outcome.state["state"] == "COMPLETED" else 1
 
 
-def _resume(run: Path, project: Optional[Path], dry_run: bool) -> int:
+def _resume(run: Path, project: Optional[Path], dry_run: bool, override_limits: bool = False) -> int:
     from autobuild.git_client import GitClient
     from autobuild.preflight import PreflightError
     from autobuild.resume import resume_preflight
@@ -188,12 +200,14 @@ def _resume(run: Path, project: Optional[Path], dry_run: bool) -> int:
 
     root = project or GitClient(Path.cwd(), ()).toplevel(Path.cwd()) or Path.cwd()
     try:
-        plan = resume_preflight(run, root)
+        plan = resume_preflight(run, root, override_limits=override_limits)
     except PreflightError as exc:
         print("Autobuild did not resume. No branch or worktree was modified.")
         for issue in exc.issues:
             print(f"  - {issue}")
         return 1
+    for change in plan.limit_overrides:
+        print(f"Limit override: {change['key']} {change['from']} -> {change['to']} (recorded in run history)")
     action = plan.resume_rollover
     if action is None:
         print(f"Resume mode: same-session (implementer {plan.assignment.provider})")
@@ -208,6 +222,40 @@ def _resume(run: Path, project: Optional[Path], dry_run: bool) -> int:
     outcome = Runner(plan).run()
     print(outcome.report, end="")
     return 0 if outcome.state["state"] == "COMPLETED" else 1
+
+
+def _stop_run(run: Path, project: Optional[Path], reason: Optional[str], clear: bool) -> int:
+    """Request (or withdraw) a remote stop through the run's file stop controller."""
+    import getpass
+    from autobuild.file_control import FileStopController
+    from autobuild.git_client import GitClient
+
+    directory = run
+    if not run.is_dir():
+        root = project or GitClient(Path.cwd(), ()).toplevel(Path.cwd()) or Path.cwd()
+        try:
+            directory = load_project_config(root).path("runs_directory") / run
+        except ConfigError as exc:
+            _report(str(run), [str(exc)])
+            return 1
+    try:
+        state = json.loads((directory / "state.json").read_text())
+        frozen = json.loads((directory / "config.json").read_text())
+    except (OSError, ValueError) as exc:
+        _report(str(run), [f"not a run directory: {exc}"])
+        return 1
+    controller = FileStopController(directory)
+    if clear:
+        print("Pending stop request withdrawn." if controller.clear() else "No pending stop request.")
+        return 0
+    request = controller.request_stop(state["run_id"], f"{getpass.getuser()} via autobuild stop", reason)
+    print(f"Stop requested for {state['run_id']} at {request.requested_at}: {directory / 'control/stop.json'}")
+    if not frozen["control"]["remote_stop_enabled"]:
+        print("Warning: this run's control.remote_stop_enabled is false, so its controller does not poll for stops; "
+              "use Ctrl-C on the controller instead.")
+    elif state["state"] in ("COMPLETED", "FAILED", "HUMAN_BLOCKED", "STOPPED"):
+        print(f"Note: the run is {state['state']}; the request applies if it is resumed (resume refuses until cleared).")
+    return 0
 
 
 def _fixture(args: argparse.Namespace) -> int:
@@ -343,6 +391,13 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("run", type=Path)
     p.add_argument("--project", type=Path)
     p.add_argument("--dry-run", action="store_true")
+    p.add_argument("--override-limits", action="store_true",
+                   help="apply governance limits changed in the config since this run started (recorded in its history)")
+    p = sub.add_parser("stop", help="request a safe stop of a running run (control.provider: file)")
+    p.add_argument("run", type=Path, help="run directory or run id")
+    p.add_argument("--project", type=Path)
+    p.add_argument("--reason")
+    p.add_argument("--clear", action="store_true", help="withdraw a pending stop request")
     p = sub.add_parser("evidence", help="inspect and verify controller validation, browser and rollover handoff evidence")
     p.add_argument("run", type=Path, help="run directory")
     p.add_argument("--attempt", type=int)
@@ -367,7 +422,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "run":
         return _run(args.brief, args.project, args.base, args.yes, args.dry_run)
     if args.command == "resume":
-        return _resume(args.run, args.project, args.dry_run)
+        return _resume(args.run, args.project, args.dry_run, args.override_limits)
+    if args.command == "stop":
+        return _stop_run(args.run, args.project, args.reason, args.clear)
     if args.command == "evidence":
         return 0 if _show_evidence(args.run, args.attempt) else 1
     if args.command == "check":

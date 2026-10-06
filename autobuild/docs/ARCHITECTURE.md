@@ -113,10 +113,21 @@ Autobuild points at them through `paths` and doesn't copy them.
 | 0.4 | **Implemented.** Controller-owned browser/E2E gates, isolated services, immutable evidence and hard checkpoint barriers. See `BROWSER_GATES.md`, ADR 0004 and `EVALUATION_0_4.md` |
 | 0.5 | **Implemented.** Normal tests/lint/type checks/builds use the shared fail-closed Bubblewrap layer, exact disposable source snapshots, isolated environment/network policy, and immutable evidence. See `VALIDATION_CONFINEMENT.md`, ADR 0005 and `EVALUATION_0_5.md` |
 | 0.6 | **Implemented.** Reviewer portability (one canonical review contract, per-adapter wire projections; Claude and Codex both review) and bounded implementer provider/session rollover through a verified handoff, with fresh validation, browser evidence and review after takeover. See `PROVIDERS.md`, `RUNNER.md` → Rollover, ADR 0006 and `EVALUATION_0_6.md` |
-| 0.7 | Recommended next: operations for unattended runs (notification provider, remote stop/control, spend limits) so a blocked or rolled-over run reaches the human promptly. Roadmap rollover (starting the next brief) stays deferred until those exist |
+| 0.7 | **Implemented.** Bounded autonomous-run governance: controller-owned runtime/revision/review/rollover/validation/browser/token budgets checked before every operation, canonical stop reasons, file-based remote stop that terminates a running provider, structured notifications (console/file/email), and explicit `--override-limits` resume. See `RUNNER.md` → Governance, `CONTROL_CONTRACT.md`, `NOTIFICATION_CONTRACT.md`, ADR 0007 and `EVALUATION_0_7.md` |
+| 0.8 | Recommended next: a phone-reachable control channel (GitHub-issue stop/resume) and roadmap rollover within one project — start the next approved GREEN brief only after a verified completion, under a run-spanning budget, never across YELLOW/RED gates |
 
 Related: `RUNNER.md`, `PROVIDERS.md`, `AUTONOMY_POLICY.md`, `ARTIFACT_CONTRACT.md`, `SAFETY_MODEL.md`,
 `CONTROL_CONTRACT.md`, `NOTIFICATION_CONTRACT.md`, `decisions/`.
+
+## Governance
+
+The controller, not a model, decides whether a run may continue. `governance.py`
+checks every budget and the remote-stop channel before each agent or tool
+operation and watches running providers; `stop_reasons.py` gives every finished
+run one canonical reason; notifications are built from controller records.
+Governance wraps the review, evidence, confinement and rollover systems without
+changing them: a governed stop preserves everything and never checkpoints,
+merges or pushes. See `RUNNER.md` → Governance and ADR 0007.
 
 ## Provider Continuity
 

@@ -1,6 +1,5 @@
 """Read-only checks for explicit human resumption of a preserved run."""
 
-import copy
 import hashlib
 import json
 from pathlib import Path
@@ -13,6 +12,8 @@ from autobuild.implementations import brief_errors
 from autobuild.git_client import GitClient, GitError
 from autobuild.preflight import PreflightError, RunPlan, completed_from_siblings
 from autobuild.browser_contract import digest, safe_file
+from autobuild.file_control import FileStopController
+from autobuild.governance import effective_config, exhausted_on_resume, limit_changes, without_overridable
 from autobuild.handoff import handoff_errors
 from autobuild.provider_failures import ProviderFailure
 from autobuild.provider_loader import load_adapter, ProviderLoadError
@@ -27,7 +28,7 @@ from autobuild.browser_contract import history_errors
 from autobuild.validation_contract import history_errors as validation_history_errors
 
 
-def resume_preflight(run: Path, project_root: Path) -> RunPlan:
+def resume_preflight(run: Path, project_root: Path, *, override_limits: bool = False) -> RunPlan:
     root = project_root.resolve()
     try:
         config = load_project_config(root)
@@ -54,14 +55,21 @@ def resume_preflight(run: Path, project_root: Path) -> RunPlan:
                 raise ValueError("implementation history artifact is missing or inconsistent")
         if (directory / ".controller.lock").exists():
             raise ValueError("controller lock exists; verify no controller is active before removing a stale lock")
-        if state["review_cycle"] >= config.max_review_cycles:
-            raise ValueError("review budget exhausted; human must increase max_review_cycles before resume")
         original = json.loads((directory / "config.json").read_text())
-        current = copy.deepcopy(config.data)
-        for document in (original, current):
-            document["limits"].pop("max_review_cycles", None)
-        if original != current:
-            raise ValueError("execution configuration changed; only max_review_cycles may change on resume")
+        if without_overridable(original) != without_overridable(config.data):
+            raise ValueError("execution configuration changed; only governance limits may change on resume")
+        effective = effective_config(original, (state.get("governance") or {}).get("overrides", []))
+        changes = limit_changes(effective, config.data)
+        if changes and not override_limits:
+            shown = ", ".join(f"{c['key']} {c['from']} -> {c['to']}" for c in changes)
+            raise ValueError(f"governance limits differ from this run's limits ({shown}); "
+                             "rerun with --override-limits to apply them explicitly")
+        exhausted = exhausted_on_resume(config.data, state)
+        if exhausted:
+            raise ValueError("budget exhausted: " + "; ".join(exhausted) + ". Raise the limit in .autobuild/config.yaml "
+                             "and resume with --override-limits")
+        if FileStopController(directory).check_stop_requested(state["run_id"]) is not None:
+            raise ValueError("a stop request is pending for this run; withdraw it with autobuild stop RUN --clear")
         frozen = directory / "brief.md"
         if hashlib.sha256(frozen.read_bytes()).hexdigest() != state.get("brief_sha256"):
             raise ValueError("frozen approved brief hash mismatch")
@@ -162,7 +170,7 @@ def resume_preflight(run: Path, project_root: Path) -> RunPlan:
                        browser_gate=bool(meta["validation"]["browser_required"]),
                        reviewer_assignment=assignments[REVIEWER],
                        reviewer_timeout=config.data["limits"].get("reviewer_timeout_seconds", 3600), resume_state=state,
-                       resume_rollover=rollover_action)
+                       resume_rollover=rollover_action, limit_overrides=changes)
     except PreflightError:
         raise
     except (OSError, ValueError, KeyError, TypeError, GitError, ProviderLoadError) as exc:

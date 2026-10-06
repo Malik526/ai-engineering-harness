@@ -60,6 +60,7 @@ class RunPlan:
     reviewer_timeout: int = DEFAULT_IMPLEMENTER_TIMEOUT
     resume_state: Optional[dict[str, Any]] = None
     resume_rollover: Optional[dict[str, Any]] = None  # {"action": "execute"|"redecide", "record": rollover record}
+    limit_overrides: list[dict[str, Any]] = field(default_factory=list)  # human budget changes applied on resume
 
 
 def completed_from_siblings(brief_path: Path) -> set[str]:
@@ -133,6 +134,22 @@ def preflight(brief_path: Path, project_root: Path, *, base_branch: Optional[str
             available, detail = False, str(exc)
         if not available:
             warnings.append(f"rollover implementer {candidate} is unavailable now ({detail}); a rollover to it would block")
+
+    # Governance: a usage budget is only enforceable if every provider that can run reports usage.
+    limits = config.data["limits"]
+    if limits.get("max_usage_tokens") is not None:
+        roles = {assignment.provider, reviewer_assignment.provider, *rollover_settings(config.data)["implementer"]}
+        for provider in sorted(roles):
+            try:
+                if not getattr(load_adapter(assignment_for(config.data, IMPLEMENTER, provider)), "reports_usage", False):
+                    issues.append(f"limits.max_usage_tokens: provider {provider} does not report usage, so the budget "
+                                  "could not be enforced")
+            except ProviderLoadError as exc:
+                issues.append(f"limits.max_usage_tokens: {exc}")
+    runtime = limits.get("max_runtime_minutes")
+    if runtime is not None and limits.get("implementer_timeout_seconds", DEFAULT_IMPLEMENTER_TIMEOUT) > runtime * 60:
+        warnings.append(f"limits.max_runtime_minutes ({runtime}) is shorter than one implementer timeout; "
+                        "the runtime budget will end a long implementation")
 
     # 5. Git repository
     git = GitClient(project_root, config.protected_branches)

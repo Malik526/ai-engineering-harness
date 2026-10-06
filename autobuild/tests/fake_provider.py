@@ -17,6 +17,13 @@ class FakeAdapter(SubprocessAdapter):
     def build_command(self, request: AgentRequest) -> list[str]:
         return [sys.executable, str(FAKE_AGENT), self.provider_id]
 
+    reports_usage = True
+
+    def parse_usage(self, request: AgentRequest) -> Optional[dict]:
+        import os
+        tokens = int(os.environ.get("FAKE_USAGE_TOKENS", "1000"))
+        return {"input_tokens": tokens - tokens // 10, "output_tokens": tokens // 10, "total_tokens": tokens}
+
     def failure_patterns(self) -> list[tuple[str, str]]:
         return [(SCHEMA_REJECTED, r"input_schema"), (SESSION_UNAVAILABLE, r"No conversation found"),
                 (QUOTA_EXHAUSTED, r"usage limit"),

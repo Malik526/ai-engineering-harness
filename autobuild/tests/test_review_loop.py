@@ -179,8 +179,12 @@ def test_resume_budget_requires_human_increase(tmp_path, monkeypatch, fake_regis
     config = yaml.safe_load(path.read_text())
     config["limits"]["max_review_cycles"] = 2
     path.write_text(yaml.safe_dump(config))
-    resumed = Runner(resume_preflight(outcome.run_dir, root)).run()
+    with pytest.raises(PreflightError, match="--override-limits"):
+        resume_preflight(outcome.run_dir, root)  # a raised limit is never applied implicitly
+    resumed = Runner(resume_preflight(outcome.run_dir, root, override_limits=True)).run()
     assert resumed.state["state"] == "COMPLETED"
+    [override] = resumed.state["governance"]["overrides"]
+    assert override["changes"] == [{"key": "limits.max_review_cycles", "from": 1, "to": 2}]
 
 
 def test_resume_rejects_review_linked_to_stale_validation(tmp_path, monkeypatch, fake_registry):
