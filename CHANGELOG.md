@@ -2,6 +2,43 @@
 
 ## 2026-10-05
 
+### Autobuild - Responsibility-Based Package and Docs Layout
+
+- Moved the flat `autobuild/autobuild/` package (60 modules) into responsibility
+  packages with `git mv` (history kept):
+  - `core/` — run lifecycle;
+  - `policy/` — autonomy, safety, secrets, briefs;
+  - `providers/` — provider contract, registry, failure classification;
+    `adapters/` moved under it;
+  - `rollover/`, `git/`, `validation/` (normal validation, browser gates and
+    the shared sandbox), `review/`, `governance/`, `control/`,
+    `notifications/`;
+  - `common/` — paths, YAML, schemas, front matter.
+
+  Only `cli.py`, `__main__.py` and `fixtures.py` stay at the root. Module file
+  names are unchanged.
+- Moved `autobuild/docs/` into `architecture/`, `operations/`, `contracts/`,
+  `safety/` and `evaluations/` beside `decisions/`, with a `docs/README.md`
+  index. Cross-references between Autobuild docs are now relative links.
+- Updated every reference to the old paths:
+  - imports, test monkeypatch targets and the provider registry's
+    `module:Class` entries;
+  - the `-m` commands for the git shim and Claude hook, and the sandbox worker
+    file paths;
+  - the core-root calculation in `paths.py`;
+  - comments, templates, schema descriptions, the planner skill, harness docs
+    and the Autobuild README (also brought up to date with `stop`, `evidence`
+    and `--override-limits`).
+- No behavior or command-syntax change. Added layout checks: docs must live in
+  a category folder, relative doc links must resolve, and modules must live in
+  a responsibility package.
+- Validation: 469 tests pass (466 + 3 layout checks); all 76 modules import;
+  CLI smoke tests passed through the installed `~/.agents/autobuild/bin/autobuild`;
+  plus core, audit, compile and diff checks.
+- A live Claude browser-fixture run on the new layout completed with the same
+  behavior: confined validation, browser FAIL → REVISE → PASS, checkpoint and
+  notification. Its git shim ran `autobuild.git.git_shim`.
+
 ### Autobuild 0.7 - Bounded Autonomous-Run Governance
 
 - Added controller-owned budgets checked before every implementation,

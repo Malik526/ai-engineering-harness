@@ -5,10 +5,10 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from autobuild.agent_provider import AgentRequest
-from autobuild.provider_failures import QUOTA_EXHAUSTED, SCHEMA_REJECTED, SESSION_UNAVAILABLE, TRANSIENT
-from autobuild.structured_output import validate_report
-from autobuild.subprocess_adapter import SubprocessAdapter
+from autobuild.providers.agent_provider import AgentRequest
+from autobuild.providers.provider_failures import QUOTA_EXHAUSTED, SCHEMA_REJECTED, SESSION_UNAVAILABLE, TRANSIENT
+from autobuild.providers.structured_output import validate_report
+from autobuild.providers.subprocess_adapter import SubprocessAdapter
 
 FAKE_AGENT = Path(__file__).with_name("fake_agent.py")
 

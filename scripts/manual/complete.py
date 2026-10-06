@@ -13,7 +13,7 @@ import subprocess
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'autobuild'))
-from autobuild.secret_files import secret_like
+from autobuild.policy.secret_files import secret_like
 
 AREAS = ('changelog', 'project_state', 'evaluation_results', 'known_limitations',
          'architectural_decisions', 'implementation_documentation')
@@ -96,7 +96,7 @@ def evaluate(root, evidence, reconciliation, commands, run=False):
             if not (names and all(name in required for name in names)) and not scope.get('not_applicable'):
                 issues.append('reconcile validation applicability: ' + kind)
     if run and commands and not unsafe:
-        from autobuild.validation_runner import run_validation
+        from autobuild.validation.validation_runner import run_validation
         before = state['fingerprint']
         outcome = run_validation(run_id='manual', commands=commands, project_root=root,
                                  worktree=root, changed_files=paths, run_dir=evidence.parent, manual_host=True)

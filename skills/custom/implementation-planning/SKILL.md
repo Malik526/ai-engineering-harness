@@ -11,9 +11,9 @@ implementer and a separate reviewer will act on without you.
 
 Core contracts live in `~/.agents/autobuild/`:
 
-- `docs/AUTONOMY_POLICY.md`: GREEN / YELLOW / RED rules
+- `docs/safety/AUTONOMY_POLICY.md`: GREEN / YELLOW / RED rules
 - `templates/implementation-brief.md`: the brief format
-- `docs/ARCHITECTURE.md`: roles and the run lifecycle
+- `docs/architecture/ARCHITECTURE.md`: roles and the run lifecycle
 
 Any provider may be configured as planner. If you're running as the project's
 implementer or reviewer (see `.autobuild/config.yaml` `agents`, or your task
@@ -50,7 +50,7 @@ For each one, decide:
 
 ## 4. Classify Autonomy
 
-Apply `docs/AUTONOMY_POLICY.md` strictly:
+Apply `docs/safety/AUTONOMY_POLICY.md` strictly:
 
 - **GREEN**: no new secrets, accounts, manual approvals, production deployment, destructive production change or billing action, and automated tooling can verify acceptance. `human_requirements` and `external_requirements` must be empty.
 - **YELLOW**: agents can prepare the work, but a human gate is needed (OAuth or developer-dashboard setup, credentials, migrations needing production approval, infrastructure). List each human action in `human_requirements` and explain why in `autonomy_rationale`.

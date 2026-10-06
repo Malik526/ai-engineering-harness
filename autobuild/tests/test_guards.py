@@ -8,11 +8,11 @@ from pathlib import Path
 
 import pytest
 
-from autobuild.branch_naming import branch_name_for, default_worktree_root, run_id_for, safe_id, slugify
-from autobuild.command_guard import check_file_write, check_git, check_shell_command
-from autobuild.git_client import GitClient, ProtectedBranchError
-from autobuild.git_shim import write_shim
-from autobuild.paths import CORE_ROOT
+from autobuild.git.branch_naming import branch_name_for, default_worktree_root, run_id_for, safe_id, slugify
+from autobuild.git.command_guard import check_file_write, check_git, check_shell_command
+from autobuild.git.git_client import GitClient, ProtectedBranchError
+from autobuild.git.git_shim import write_shim
+from autobuild.common.paths import CORE_ROOT
 from project_fixture import git, make_project
 
 

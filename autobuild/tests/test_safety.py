@@ -2,10 +2,10 @@
 
 from pathlib import Path
 
-from autobuild.config import ProjectConfig
-from autobuild.policy_loader import load_policy
-from autobuild.run_state_checks import run_state_errors
-from autobuild.safety import is_operation_allowed, is_protected_branch
+from autobuild.core.config import ProjectConfig
+from autobuild.policy.policy_loader import load_policy
+from autobuild.core.run_state_checks import run_state_errors
+from autobuild.policy.safety import is_operation_allowed, is_protected_branch
 from helpers import example_json, starter_config
 
 

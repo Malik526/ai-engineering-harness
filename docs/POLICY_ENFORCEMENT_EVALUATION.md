@@ -23,7 +23,7 @@ Autobuild deterministic controls.
 | Policy matrix coverage | `scripts/setup/audit_instructions.py` and `scripts/tests/test_instruction_audit.py` | Missing matrix entries for canonical policies fail the audit/test. | Pass: audit covers the live matrix; unit test verifies a missing `SECURITY.md` entry fails. |
 | Claude manual commit guard | `scripts/hooks/git_commit_guard.py` and `scripts/tests/test_git_commit_guard.py` | `git commit`, `git -C ... commit`, global-option forms, and multi-command forms ask; non-commit Git commands pass. | Pass: hook tests cover commit and non-commit forms. |
 | Codex manual commit guard | `~/.codex/rules/default.rules`, audited by `audit_instructions.py` | `git commit`, `git -C`, and `git -c` prompt rather than silently running. | Pass: live audit confirms all three Codex prompt rules. |
-| Autobuild checkpoint ownership | `autobuild/autobuild/checkpoint_policy.py`, runner tests | GREEN validated work checkpoints on run branch; disabled/non-GREEN/failed/no-change/protected cases do not. | Pass: Autobuild suite covers checkpoint policy and runner behavior. |
+| Autobuild checkpoint ownership | `autobuild/autobuild/git/checkpoint_policy.py`, runner tests | GREEN validated work checkpoints on run branch; disabled/non-GREEN/failed/no-change/protected cases do not. | Pass: Autobuild suite covers checkpoint policy and runner behavior. |
 | Manual mode usability | Policy matrix review | No background service, global write hook, or mandatory Autobuild behavior was added to normal work. | Pass by design |
 | Semantic rule preservation | Policy matrix review | Context relevance, documentation authority, verification depth, and architectural judgment remain model instructions. | Pass by design |
 
@@ -72,7 +72,7 @@ results above remain unchanged; ADR 0003 records the current architecture.
 
 Autobuild 0.3 adds fresh read-only reviewers, bounded resumed corrections,
 per-cycle evidence and explicit human resume without changing manual-mode
-commit ownership. See [Autobuild 0.3 Evaluation](../autobuild/docs/EVALUATION_0_3.md)
+commit ownership. See [Autobuild 0.3 Evaluation](../autobuild/docs/evaluations/EVALUATION_0_3.md)
 for fake-provider safety regressions and live Codex REVISE-to-PASS/resume results.
 Fixture main remained unchanged. Live Claude-to-Codex completion is quota-blocked,
 not a passing cross-provider result. The earlier evaluations remain historical.

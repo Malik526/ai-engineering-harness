@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://autobuild.local/schemas/notification.schema.json",
   "title": "Run notification payload",
-  "description": "Built deterministically from run data by autobuild/notification_payload.py; providers only format and deliver it.",
+  "description": "Built deterministically from run data by autobuild/notifications/notification_payload.py; providers only format and deliver it.",
   "type": "object",
   "additionalProperties": false,
   "required": [

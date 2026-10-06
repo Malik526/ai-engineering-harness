@@ -2,7 +2,7 @@
 
 import pytest
 
-from autobuild.checkpoint_policy import decide_checkpoint
+from autobuild.git.checkpoint_policy import decide_checkpoint
 
 GOOD = dict(enabled_in_config=True, autonomy_execution="autonomous", validation_passed=True,
             has_changes=True, branch_protected=False)

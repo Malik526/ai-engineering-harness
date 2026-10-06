@@ -102,7 +102,7 @@ identity checks, read-only role controls, per-cycle Git/validation evidence and
 explicit human resume. Only PASS reaches eligible controller checkpointing;
 manual harness development still never commits automatically. No roadmap
 rollover or browser certification is added. Current state and limitations live
-in `autobuild/docs/ARCHITECTURE.md`, `RUNNER.md`, `EVALUATION_0_3.md` and its ADR 0003.
+in `autobuild/docs/architecture/ARCHITECTURE.md`, `autobuild/docs/operations/RUNNER.md`, `autobuild/docs/evaluations/EVALUATION_0_3.md` and its ADR 0003.
 
 ## Autobuild 0.4
 
@@ -113,5 +113,5 @@ checkpointing even if reviewer judgment is PASS; missing required coverage no
 longer gets the historical 0.3 checkpoint-before-manual-gate exception. Linux
 Bubblewrap is mandatory for browser execution, with no unsandboxed fallback.
 Normal validation/provider confinement gaps remain explicit. No rollover or
-merge/push is implemented. See `autobuild/docs/BROWSER_GATES.md`, ADR 0004 and
-`EVALUATION_0_4.md` for contracts, measured evidence and limitations.
+merge/push is implemented. See `autobuild/docs/operations/BROWSER_GATES.md`, ADR 0004 and
+`autobuild/docs/evaluations/EVALUATION_0_4.md` for contracts, measured evidence and limitations.

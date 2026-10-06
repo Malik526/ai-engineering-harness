@@ -65,7 +65,7 @@ records one canonical stop reason; budget and remote stops preserve all work
 and evidence and never checkpoint. Budgets change only through
 `autobuild resume --override-limits`, recorded in the run. Notifications are
 built from controller records and their delivery cannot alter run state. See
-ADR 0007 and `autobuild/docs/EVALUATION_0_7.md`.
+ADR 0007 and `autobuild/docs/evaluations/EVALUATION_0_7.md`.
 
 ### Autobuild 0.6 Provider Continuity Controls (2026-10-05)
 
@@ -78,7 +78,7 @@ Rollover is opt-in, capped at one per run, restricted to configured
 replacements and allowed transitions, health-checked, and preceded by a hashed
 handoff that is re-verified against the live worktree, refs and evidence. The
 replacement's work receives fresh confined validation, browser gates and a
-fresh reviewer. See ADR 0006 and `autobuild/docs/EVALUATION_0_6.md`.
+fresh reviewer. See ADR 0006 and `autobuild/docs/evaluations/EVALUATION_0_6.md`.
 
 ### Autobuild 0.5 Validation Controls (2026-10-04)
 
@@ -98,7 +98,7 @@ history integrity is checked before review, resume, and checkpoint. Required
 non-PASS blocks checkpoint independently of reviewer PASS. This remains scoped
 Linux process/filesystem/network confinement, not hostile multi-tenant isolation:
 trusted runtime binaries, kernel safety, content scanning and CPU/memory quotas are
-outside 0.5. See ADR 0005, `VALIDATION_CONFINEMENT.md`, and `EVALUATION_0_5.md`.
+outside 0.5. See ADR 0005, `autobuild/docs/safety/VALIDATION_CONFINEMENT.md`, and `autobuild/docs/evaluations/EVALUATION_0_5.md`.
 
 ### Autobuild 0.4 Browser Controls (2026-10-04)
 
@@ -115,8 +115,8 @@ browser execution. Missing sandbox capability fails closed. Artifacts are only
 copied from fresh approved output roots with link/path/filename/budget checks.
 At that milestone normal validation remained unsandboxed; 0.5 supersedes that
 gap. Secret content scanning and resource quotas remain gaps. These controls do
-not constitute hostile-workload isolation. See `autobuild/docs/BROWSER_GATES.md`,
-ADR 0004 and `EVALUATION_0_4.md`.
+not constitute hostile-workload isolation. See `autobuild/docs/operations/BROWSER_GATES.md`,
+ADR 0004 and `autobuild/docs/evaluations/EVALUATION_0_4.md`.
 
 ### Autobuild 0.3 Controls (2026-10-04)
 
@@ -126,7 +126,7 @@ read-only provider execution, content snapshots and a hard invocation budget.
 Only PASS reaches existing controller checkpoint eligibility. Explicit human
 resume verifies the preserved config/brief/worktree/refs/artifacts and retains
 cycle/session history; no automatic gate resume or provider fallback.
-See `autobuild/docs/EVALUATION_0_3.md` and ADR 0003 there. Reviewer judgment and
+See `autobuild/docs/evaluations/EVALUATION_0_3.md` and ADR 0003 there. Reviewer judgment and
 ignored-file/process side effects remain gaps, not claims of full confinement.
 
 | Capability | Reused for | Notes |

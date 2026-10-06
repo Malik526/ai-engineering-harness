@@ -11,11 +11,11 @@ import time
 
 import pytest
 
-from autobuild.config import config_errors
-from autobuild.paths import CORE_ROOT
-from autobuild.schemas import schema_errors
-from autobuild.validation_contract import digest, evidence_errors, history_errors
-from autobuild.validation_runner import run_validation
+from autobuild.core.config import config_errors
+from autobuild.common.paths import CORE_ROOT
+from autobuild.common.schemas import schema_errors
+from autobuild.validation.validation_contract import digest, evidence_errors, history_errors
+from autobuild.validation.validation_runner import run_validation
 from project_fixture import git
 
 
@@ -82,7 +82,7 @@ def test_bubblewrap_and_setup_failures_are_errors_without_host_fallback(confined
     worktree, _, _, execute = confined
     marker = worktree / "must-not-exist"
     spec = command("would-write-host", ["sh", "-c", f"printf escaped > {marker}"])
-    monkeypatch.setattr("autobuild.sandbox.shutil.which", lambda _: None)
+    monkeypatch.setattr("autobuild.validation.sandbox.shutil.which", lambda _: None)
     missing, _ = execute([spec])
     assert missing.document["commands"][0]["status"] == "ERROR"
     assert "requires bubblewrap" in missing.document["commands"][0]["detail"]
@@ -91,7 +91,7 @@ def test_bubblewrap_and_setup_failures_are_errors_without_host_fallback(confined
     def broken_policy(*_args, **_kwargs):
         raise RuntimeError("synthetic mount setup failure")
 
-    monkeypatch.setattr("autobuild.validation_runner.sandbox_command", broken_policy)
+    monkeypatch.setattr("autobuild.validation.validation_runner.sandbox_command", broken_policy)
     setup, _ = execute([spec])
     assert setup.document["commands"][0]["status"] == "ERROR"
     assert "mount setup failure" in setup.document["commands"][0]["detail"]
@@ -196,7 +196,7 @@ def test_environment_is_filtered_and_values_are_absent_from_evidence(confined, m
 
 
 def test_reserved_environment_keys_are_rejected():
-    from autobuild.validation_contract import validation_config_errors
+    from autobuild.validation.validation_contract import validation_config_errors
 
     errors = validation_config_errors({"commands": [command("unsafe-env", ["true"], env={"PATH": "/tmp"})]})
     assert errors and "controller-owned or unsafe" in errors[0]
@@ -369,9 +369,9 @@ def test_interruption_terminates_sandbox_and_cleans_workspace(confined, monkeypa
     def materialize_without_process(_source, _tree, destination):
         shutil.copytree(worktree, destination, dirs_exist_ok=True, ignore=shutil.ignore_patterns(".git"))
 
-    monkeypatch.setattr("autobuild.validation_runner._materialize_snapshot", materialize_without_process)
-    monkeypatch.setattr("autobuild.validation_runner.subprocess.Popen", lambda *_args, **_kwargs: InterruptedProcess())
-    monkeypatch.setattr("autobuild.validation_runner.terminate_process_group", lambda process: terminated.append(process))
+    monkeypatch.setattr("autobuild.validation.validation_runner._materialize_snapshot", materialize_without_process)
+    monkeypatch.setattr("autobuild.validation.validation_runner.subprocess.Popen", lambda *_args, **_kwargs: InterruptedProcess())
+    monkeypatch.setattr("autobuild.validation.validation_runner.terminate_process_group", lambda process: terminated.append(process))
     with pytest.raises(KeyboardInterrupt):
         execute([command("interrupt", ["true"])])
     assert len(terminated) == 1

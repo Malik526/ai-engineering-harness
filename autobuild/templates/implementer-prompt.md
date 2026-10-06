@@ -1,5 +1,5 @@
 <!--
-Implementer prompt assembled by autobuild/prompt_builder.py (string.Template).
+Implementer prompt assembled by autobuild/core/prompt_builder.py (string.Template).
 This comment is stripped before rendering. Saved per run as
 implementation/prompt.md — the exact input the implementer received.
 -->

@@ -1,7 +1,7 @@
 <!--
-Notification body rendered by autobuild/notification_format.py with Python
+Notification body rendered by autobuild/notifications/notification_format.py with Python
 string.Template ($name / ${name}). This comment is stripped before rendering.
-Fields come from notification.schema.json; see docs/NOTIFICATION_CONTRACT.md.
+Fields come from notification.schema.json; see docs/contracts/NOTIFICATION_CONTRACT.md.
 -->
 ${project} Autobuild — ${implementation_id} ${event_title}
 

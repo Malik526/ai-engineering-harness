@@ -2,7 +2,7 @@
 
 import pytest
 
-from autobuild import provider_registry
+from autobuild.providers import provider_registry
 from fake_provider import TEST_REGISTRY
 
 

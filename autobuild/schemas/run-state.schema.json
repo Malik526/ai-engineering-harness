@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://autobuild.local/schemas/run-state.schema.json",
   "title": "Autobuild run state",
-  "description": "runs/<run-id>/state.json. Written only by the controller. Rules that need the project config (protected branches, review-cycle limit) are checked in autobuild/run_state_checks.py.",
+  "description": "runs/<run-id>/state.json. Written only by the controller. Rules that need the project config (protected branches, review-cycle limit) are checked in autobuild/core/run_state_checks.py.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -33,7 +33,7 @@
       "pattern": "^[0-9a-f]{40}$"
     },
     "checkpoint": {
-      "description": "The controller's checkpoint-commit decision (autobuild/checkpoint_policy.py) and why.",
+      "description": "The controller's checkpoint-commit decision (autobuild/git/checkpoint_policy.py) and why.",
       "type": "object",
       "additionalProperties": false,
       "required": ["committed", "reason"],

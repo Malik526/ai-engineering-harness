@@ -22,8 +22,8 @@ from string import Template
 from typing import Optional
 
 from autobuild import __version__
-from autobuild.paths import CORE_ROOT, TEMPLATE_DIR
-from autobuild.yaml_loader import load_yaml
+from autobuild.common.paths import CORE_ROOT, TEMPLATE_DIR
+from autobuild.common.yaml_loader import load_yaml
 
 MARKER = "autobuild-fixture.json"
 OWNER = "autobuild"

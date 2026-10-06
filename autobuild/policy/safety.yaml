@@ -1,9 +1,9 @@
-# Safety policy — operation ids read by autobuild/safety.py.
+# Safety policy — operation ids read by autobuild/policy/safety.py.
 #
 # Default deny: an operation the controller does not find in `allowed` is
 # refused, even if it is not listed in `prohibited`. The prohibited list exists
 # so the intent is explicit and so tests can prove the two lists never overlap.
-# Human-readable trust boundaries: docs/SAFETY_MODEL.md.
+# Human-readable trust boundaries: docs/safety/SAFETY_MODEL.md.
 version: 1
 
 allowed:

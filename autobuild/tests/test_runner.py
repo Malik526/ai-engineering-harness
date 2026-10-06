@@ -5,10 +5,10 @@ from pathlib import Path
 
 import pytest
 
-from autobuild.artifacts import RUN_ARTIFACTS
-from autobuild.preflight import PreflightError, preflight
-from autobuild.runner import Runner
-from autobuild.schemas import schema_errors
+from autobuild.core.artifacts import RUN_ARTIFACTS
+from autobuild.core.preflight import PreflightError, preflight
+from autobuild.core.runner import Runner
+from autobuild.common.schemas import schema_errors
 from project_fixture import git, make_project
 
 
@@ -238,7 +238,7 @@ def test_preflight_refuses_worktree_root_inside_project(tmp_path, fake_registry)
 
 
 def test_prompt_shows_argv_validation_commands_with_shell_quoting():
-    from autobuild.prompt_builder import _validation_lines
+    from autobuild.core.prompt_builder import _validation_lines
     line = _validation_lines([{"name": "content", "kind": "test",
                                "command": ["grep", "-qx", "Autobuild 0.2 verification", "file.txt"]}])
     assert "`grep -qx 'Autobuild 0.2 verification' file.txt`" in line

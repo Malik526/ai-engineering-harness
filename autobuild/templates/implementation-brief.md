@@ -1,6 +1,6 @@
 ---
 # Read by the controller; validate with: autobuild brief <file>
-# Rules: docs/AUTONOMY_POLICY.md. Quote dates and ids that look like numbers.
+# Rules: docs/safety/AUTONOMY_POLICY.md. Quote dates and ids that look like numbers.
 id: "M0.0"
 title: Short imperative title
 status: draft            # draft until the human explicitly approves the plan

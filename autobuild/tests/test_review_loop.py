@@ -6,10 +6,10 @@ from pathlib import Path
 import pytest
 import yaml
 
-from autobuild.preflight import PreflightError, preflight
-from autobuild.resume import resume_preflight
-from autobuild.runner import Runner
-from autobuild.schemas import schema_errors
+from autobuild.core.preflight import PreflightError, preflight
+from autobuild.core.resume import resume_preflight
+from autobuild.core.runner import Runner
+from autobuild.common.schemas import schema_errors
 from project_fixture import git, make_project
 
 

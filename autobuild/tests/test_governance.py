@@ -10,16 +10,16 @@ from pathlib import Path
 import pytest
 import yaml
 
-from autobuild import governance
-from autobuild.config import config_errors
-from autobuild.email_notifier import EmailNotifier
-from autobuild.file_control import FileStopController
-from autobuild.notification_payload import event_for
-from autobuild.preflight import PreflightError, preflight
-from autobuild.resume import resume_preflight
-from autobuild.run_state_checks import run_state_errors
-from autobuild.runner import Runner
-from autobuild import stop_reasons
+from autobuild.governance import governance
+from autobuild.core.config import config_errors
+from autobuild.notifications.email_notifier import EmailNotifier
+from autobuild.control.file_control import FileStopController
+from autobuild.notifications.notification_payload import event_for
+from autobuild.core.preflight import PreflightError, preflight
+from autobuild.core.resume import resume_preflight
+from autobuild.core.run_state_checks import run_state_errors
+from autobuild.core.runner import Runner
+from autobuild.governance import stop_reasons
 from helpers import starter_config
 from project_fixture import git, make_project
 
@@ -260,7 +260,7 @@ def test_rollover_notification_precedes_final(tmp_path, monkeypatch, fake_regist
 
 
 def test_notification_failure_never_affects_the_run(tmp_path, monkeypatch, fake_registry):
-    from autobuild import file_notifier
+    from autobuild.notifications import file_notifier
 
     def broken(self, payload):
         raise ConnectionError("mail server down")

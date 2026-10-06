@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 
 from autobuild import fixtures
-from autobuild.config import load_project_config
-from autobuild.git_client import GitClient
+from autobuild.core.config import load_project_config
+from autobuild.git.git_client import GitClient
 
 
 @pytest.fixture

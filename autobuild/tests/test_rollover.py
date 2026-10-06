@@ -7,17 +7,19 @@ from pathlib import Path
 
 import pytest
 
-from autobuild import browser_runner, provider_registry
-from autobuild.browser_contract import digest
+from autobuild.validation import browser_runner
+
+from autobuild.providers import provider_registry
+from autobuild.validation.browser_contract import digest
 from autobuild.cli import main
-from autobuild.config import config_errors
-from autobuild.preflight import PreflightError, preflight
-from autobuild.provider_failures import (INVALID_OUTPUT, QUOTA_EXHAUSTED, SCHEMA_REJECTED, SESSION_UNAVAILABLE,
+from autobuild.core.config import config_errors
+from autobuild.core.preflight import PreflightError, preflight
+from autobuild.providers.provider_failures import (INVALID_OUTPUT, QUOTA_EXHAUSTED, SCHEMA_REJECTED, SESSION_UNAVAILABLE,
                                          TIMEOUT, TRANSIENT, ProviderFailure)
-from autobuild.resume import resume_preflight
-from autobuild.rollover_policy import decide
-from autobuild.runner import Runner
-from autobuild.run_state_checks import run_state_errors
+from autobuild.core.resume import resume_preflight
+from autobuild.rollover.rollover_policy import decide
+from autobuild.core.runner import Runner
+from autobuild.core.run_state_checks import run_state_errors
 from fake_provider import TEST_REGISTRY
 from helpers import starter_config
 from project_fixture import git, make_project
@@ -219,7 +221,7 @@ def test_prepared_rollover_refuses_takeover_after_tampering(tmp_path, monkeypatc
 
 
 def test_runner_rejects_handoff_changed_before_takeover(tmp_path, monkeypatch, fake_registry):
-    from autobuild import runner as runner_module
+    from autobuild.core import runner as runner_module
     real = runner_module.build_handoff
 
     def build_then_tamper(**kwargs):

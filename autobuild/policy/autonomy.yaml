@@ -1,8 +1,8 @@
-# Autonomy policy — data read by autobuild/autonomy.py.
+# Autonomy policy — data read by autobuild/policy/autonomy.py.
 #
 # The planner assigns a class to each implementation; this file decides what
 # the controller may do with it. No model is asked whether to continue.
-# Human-readable rationale and examples: docs/AUTONOMY_POLICY.md.
+# Human-readable rationale and examples: docs/safety/AUTONOMY_POLICY.md.
 version: 1
 
 classes:

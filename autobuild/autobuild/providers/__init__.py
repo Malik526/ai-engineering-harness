@@ -1,0 +1,1 @@
+"""Provider-neutral agent invocation: the AgentProvider contract, the shared subprocess adapter, the provider registry and loader, failure classification and structured-output parsing. Concrete CLIs live only in providers/adapters/."""

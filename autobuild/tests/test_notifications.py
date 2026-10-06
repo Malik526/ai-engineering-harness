@@ -4,11 +4,11 @@ import io
 
 import pytest
 
-from autobuild.autonomy import evaluate_gate
-from autobuild.console_notifier import ConsoleNotifier
-from autobuild.notification_payload import PayloadError, build_notification
-from autobuild.notifier import should_notify
-from autobuild.states import RunState
+from autobuild.policy.autonomy import evaluate_gate
+from autobuild.notifications.console_notifier import ConsoleNotifier
+from autobuild.notifications.notification_payload import PayloadError, build_notification
+from autobuild.notifications.notifier import should_notify
+from autobuild.core.states import RunState
 from helpers import example_brief, example_json
 
 

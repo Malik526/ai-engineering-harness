@@ -4,9 +4,9 @@ import copy
 import json
 from typing import Any
 
-from autobuild.implementations import load_brief
-from autobuild.paths import EXAMPLES_DIR, TEMPLATE_DIR
-from autobuild.yaml_loader import load_yaml
+from autobuild.policy.implementations import load_brief
+from autobuild.common.paths import EXAMPLES_DIR, TEMPLATE_DIR
+from autobuild.common.yaml_loader import load_yaml
 
 
 def example_json(name: str) -> dict[str, Any]:

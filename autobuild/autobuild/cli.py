@@ -26,16 +26,16 @@ import sys
 from pathlib import Path
 from typing import Callable, Optional
 
-from autobuild.autonomy import evaluate_gate
-from autobuild.config import ConfigError, load_project_config, missing_paths
-from autobuild.implementations import brief_file_errors, load_brief
-from autobuild.paths import CORE_ROOT, EXAMPLES_DIR
-from autobuild.policy_loader import load_policy
-from autobuild.provider_registry import load_registry
-from autobuild.roles import ROLES
-from autobuild.run_state_checks import run_state_errors
-from autobuild.schemas import SCHEMA_NAMES, load_schema, schema_errors
-from autobuild.states import RunState
+from autobuild.policy.autonomy import evaluate_gate
+from autobuild.core.config import ConfigError, load_project_config, missing_paths
+from autobuild.policy.implementations import brief_file_errors, load_brief
+from autobuild.common.paths import CORE_ROOT, EXAMPLES_DIR
+from autobuild.policy.policy_loader import load_policy
+from autobuild.providers.provider_registry import load_registry
+from autobuild.core.roles import ROLES
+from autobuild.core.run_state_checks import run_state_errors
+from autobuild.common.schemas import SCHEMA_NAMES, load_schema, schema_errors
+from autobuild.core.states import RunState
 
 
 def _report(label: str, errors: list[str]) -> bool:
@@ -131,7 +131,7 @@ def _show_agents(project: Path) -> bool:
 
 
 def _rollover_line(config_data: dict) -> str:
-    from autobuild.rollover_policy import settings
+    from autobuild.rollover.rollover_policy import settings
     policy = settings(config_data)
     if not policy["max_rollovers"]:
         return "disabled (a provider/session failure stops for a human, with a handoff package)"
@@ -151,9 +151,9 @@ def _governance_line(config_data: dict) -> str:
 
 
 def _run(brief: Path, project: Optional[Path], base: Optional[str], assume_yes: bool, dry_run: bool) -> int:
-    from autobuild.git_client import GitClient
-    from autobuild.preflight import PreflightError, preflight
-    from autobuild.runner import Runner
+    from autobuild.git.git_client import GitClient
+    from autobuild.core.preflight import PreflightError, preflight
+    from autobuild.core.runner import Runner
 
     root = project or GitClient(Path.cwd(), ()).toplevel(Path.cwd()) or Path.cwd()
     try:
@@ -193,10 +193,10 @@ def _run(brief: Path, project: Optional[Path], base: Optional[str], assume_yes: 
 
 
 def _resume(run: Path, project: Optional[Path], dry_run: bool, override_limits: bool = False) -> int:
-    from autobuild.git_client import GitClient
-    from autobuild.preflight import PreflightError
-    from autobuild.resume import resume_preflight
-    from autobuild.runner import Runner
+    from autobuild.git.git_client import GitClient
+    from autobuild.core.preflight import PreflightError
+    from autobuild.core.resume import resume_preflight
+    from autobuild.core.runner import Runner
 
     root = project or GitClient(Path.cwd(), ()).toplevel(Path.cwd()) or Path.cwd()
     try:
@@ -227,8 +227,8 @@ def _resume(run: Path, project: Optional[Path], dry_run: bool, override_limits: 
 def _stop_run(run: Path, project: Optional[Path], reason: Optional[str], clear: bool) -> int:
     """Request (or withdraw) a remote stop through the run's file stop controller."""
     import getpass
-    from autobuild.file_control import FileStopController
-    from autobuild.git_client import GitClient
+    from autobuild.control.file_control import FileStopController
+    from autobuild.git.git_client import GitClient
 
     directory = run
     if not run.is_dir():
@@ -317,8 +317,8 @@ def _show_gate(path: Path, done: str) -> bool:
 
 
 def _show_evidence(run: Path, attempt: Optional[int]) -> bool:
-    from autobuild.browser_contract import digest, evidence_errors as browser_evidence_errors, safe_file
-    from autobuild.validation_contract import evidence_errors as validation_evidence_errors
+    from autobuild.validation.browser_contract import digest, evidence_errors as browser_evidence_errors, safe_file
+    from autobuild.validation.validation_contract import evidence_errors as validation_evidence_errors
     try:
         state = json.loads((run / "state.json").read_text())
         histories = (("validation", state.get("validation_history", []), validation_evidence_errors),

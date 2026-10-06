@@ -2,7 +2,7 @@
 
 import pytest
 
-from autobuild.front_matter import FrontMatterError, split_front_matter
+from autobuild.common.front_matter import FrontMatterError, split_front_matter
 
 
 def test_dates_stay_strings():

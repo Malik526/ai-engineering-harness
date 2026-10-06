@@ -1,6 +1,6 @@
 """Autonomy gate decisions."""
 
-from autobuild.autonomy import evaluate_gate
+from autobuild.policy.autonomy import evaluate_gate
 from helpers import example_brief
 
 

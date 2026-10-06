@@ -7,13 +7,13 @@ from dataclasses import replace
 
 import pytest
 
-from autobuild.adapters.claude import ClaudeAdapter
-from autobuild.adapters.claude_hook import decide
-from autobuild.adapters.codex import CodexAdapter
-from autobuild.agent_provider import AgentRequest
-from autobuild.provider_loader import ProviderLoadError, load_adapter
-from autobuild.provider_registry import RoleAssignment, resolve_assignments
-from autobuild.schemas import load_schema
+from autobuild.providers.adapters.claude import ClaudeAdapter
+from autobuild.providers.adapters.claude_hook import decide
+from autobuild.providers.adapters.codex import CodexAdapter
+from autobuild.providers.agent_provider import AgentRequest
+from autobuild.providers.provider_loader import ProviderLoadError, load_adapter
+from autobuild.providers.provider_registry import RoleAssignment, resolve_assignments
+from autobuild.common.schemas import load_schema
 from helpers import starter_config
 
 REPORT = {"implementation_summary": "s", "files_changed": ["a"], "tests_reported": [],
@@ -74,7 +74,7 @@ def test_claude_command(tmp_path):
     assert flags["--session-id"] == "11111111-2222-3333-4444-555555555555"
     assert "$schema" not in json.loads(flags["--json-schema"])
     hook = json.loads(flags["--settings"])["hooks"]["PreToolUse"][0]
-    assert "Bash" in hook["matcher"] and "autobuild.adapters.claude_hook" in hook["hooks"][0]["command"]
+    assert "Bash" in hook["matcher"] and "autobuild.providers.adapters.claude_hook" in hook["hooks"][0]["command"]
     assert "WebFetch" in flags["--disallowedTools"]
 
 

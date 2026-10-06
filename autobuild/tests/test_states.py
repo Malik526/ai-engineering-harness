@@ -2,8 +2,8 @@
 
 import pytest
 
-from autobuild.schemas import load_schema
-from autobuild.states import (
+from autobuild.common.schemas import load_schema
+from autobuild.core.states import (
     RESUME_TRANSITIONS,
     STOPPABLE,
     TERMINAL,

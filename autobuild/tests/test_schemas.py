@@ -3,10 +3,10 @@
 import pytest
 from jsonschema import Draft202012Validator
 
-from autobuild.config import config_errors
-from autobuild.implementations import brief_errors
-from autobuild.run_state_checks import run_state_errors
-from autobuild.schemas import SCHEMA_NAMES, load_schema, schema_errors
+from autobuild.core.config import config_errors
+from autobuild.policy.implementations import brief_errors
+from autobuild.core.run_state_checks import run_state_errors
+from autobuild.common.schemas import SCHEMA_NAMES, load_schema, schema_errors
 from helpers import example_brief, example_json, starter_config
 
 

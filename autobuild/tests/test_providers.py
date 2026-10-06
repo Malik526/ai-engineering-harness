@@ -4,10 +4,10 @@ import re
 
 import pytest
 
-from autobuild.config import config_errors
-from autobuild.paths import CORE_ROOT
-from autobuild.provider_registry import assignment_errors, load_registry, resolve_assignments
-from autobuild.roles import ROLES
+from autobuild.core.config import config_errors
+from autobuild.common.paths import CORE_ROOT
+from autobuild.providers.provider_registry import assignment_errors, load_registry, resolve_assignments
+from autobuild.core.roles import ROLES
 from helpers import starter_config
 
 
@@ -71,9 +71,9 @@ def test_registry_roles_are_known_roles():
 
 
 def test_core_code_never_names_a_provider():
-    """Orchestration code works through roles; only the registry and autobuild/adapters/ name providers."""
+    """Orchestration code works through roles; only the registry and autobuild/providers/adapters/ name providers."""
     names = re.compile("|".join(re.escape(p) for p in load_registry()["providers"]), re.I)
-    adapters = CORE_ROOT / "autobuild" / "adapters"
+    adapters = CORE_ROOT / "autobuild" / "providers" / "adapters"
     offenders = [
         f"{path.relative_to(CORE_ROOT)}:{n}"
         for path in (CORE_ROOT / "autobuild").rglob("*.py")

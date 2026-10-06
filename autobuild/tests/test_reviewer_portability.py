@@ -6,17 +6,17 @@ from pathlib import Path
 import pytest
 from jsonschema import Draft202012Validator
 
-from autobuild.adapters.claude import ClaudeAdapter
-from autobuild.adapters.claude_schema import SchemaProjectionError, input_schema
-from autobuild.adapters.codex import CodexAdapter
-from autobuild.adapters.codex_schema import omit_optional_nulls, output_schema
-from autobuild.agent_provider import AgentRequest
-from autobuild.preflight import preflight
-from autobuild.provider_failures import QUOTA_EXHAUSTED, SCHEMA_REJECTED, SESSION_UNAVAILABLE, INVALID_OUTPUT
-from autobuild.provider_registry import RoleAssignment
-from autobuild.review_contract import normalize_review
-from autobuild.runner import Runner
-from autobuild.schemas import load_schema
+from autobuild.providers.adapters.claude import ClaudeAdapter
+from autobuild.providers.adapters.claude_schema import SchemaProjectionError, input_schema
+from autobuild.providers.adapters.codex import CodexAdapter
+from autobuild.providers.adapters.codex_schema import omit_optional_nulls, output_schema
+from autobuild.providers.agent_provider import AgentRequest
+from autobuild.core.preflight import preflight
+from autobuild.providers.provider_failures import QUOTA_EXHAUSTED, SCHEMA_REJECTED, SESSION_UNAVAILABLE, INVALID_OUTPUT
+from autobuild.providers.provider_registry import RoleAssignment
+from autobuild.review.review_contract import normalize_review
+from autobuild.core.runner import Runner
+from autobuild.common.schemas import load_schema
 from project_fixture import make_project
 
 SAMPLES = Path(__file__).with_name("provider_samples")
