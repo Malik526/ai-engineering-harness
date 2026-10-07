@@ -58,13 +58,14 @@ def make_project(tmp_path: Path, *, provider: str = "fake-a", commands: Optional
     """Create <tmp>/proj on main with a GREEN brief; return (project root, brief path)."""
     root = tmp_path / "proj"
     (root / "docs" / "decisions").mkdir(parents=True)
-    (root / "docs" / "roadmap").mkdir()
+    (root / "docs" / "roadmap" / "milestone-1").mkdir(parents=True)
     (root / ".autobuild" / "runs").mkdir(parents=True)
     (root / "docs" / "decisions" / ".gitkeep").write_text("")
     (root / ".autobuild" / "runs" / ".gitkeep").write_text("")
     (root / "PROJECT_STATE.md").write_text("# State\n")
     (root / ".gitignore").write_text(".autobuild/runs/*\n!.autobuild/runs/.gitkeep\n")
-    brief = root / "docs" / "roadmap" / "T-1.md"
+    (root / "docs" / "roadmap" / "README.md").write_text("# Implementation Roadmap\n")
+    brief = root / "docs" / "roadmap" / "milestone-1" / "T-1.md"
     brief.write_text(BRIEF.format(browser=str(browser).lower()))
     config = {
         "version": 1,

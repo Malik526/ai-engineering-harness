@@ -269,7 +269,7 @@ def _fixture(args: argparse.Namespace) -> int:
             print(f"FAIL {exc}")
             return 1
         print(f"Created fixture {path}")
-        print(f"  cd {path} && {CORE_ROOT / 'bin' / 'autobuild'} run docs/roadmap/V-1.md --dry-run")
+        print(f"  cd {path} && {CORE_ROOT / 'bin' / 'autobuild'} run docs/roadmap/verification/V-1.md --dry-run")
         return 0
     if args.action == "list":
         found = fixtures.list_fixtures()

@@ -33,7 +33,7 @@ autobuild check     # schemas, policy and examples are consistent
 
 Details are in the harness `docs/INSTALLATION.md`.
 
-## Project Setup
+## Add Autobuild To A Project
 
 A project only needs one directory of its own:
 
@@ -42,21 +42,30 @@ your-project/
   .autobuild/
     config.yaml        # roles/providers, branches, paths, limits, validation commands
     runs/              # run artifacts, git-ignored (keep runs/.gitkeep)
-  docs/roadmap/        # briefs from the planner (paths.roadmap)
+  docs/roadmap/        # project-owned brief index and milestone folders (paths.roadmap)
   PROJECT_STATE.md     # paths.project_state
   docs/decisions/      # paths.adr_directory
 ```
 
-To add Autobuild to an existing repository:
+From the project root:
 
-1. Copy [`templates/project-config.yaml`](templates/project-config.yaml) to
-   `.autobuild/config.yaml`.
-2. Fill in:
+```bash
+mkdir -p .autobuild/runs docs/roadmap docs/decisions
+cp ~/.agents/autobuild/templates/project-config.yaml .autobuild/config.yaml
+cp ~/.agents/autobuild/templates/roadmap-README.md docs/roadmap/README.md
+touch .autobuild/runs/.gitkeep docs/decisions/.gitkeep PROJECT_STATE.md
+```
+
+Then:
+
+1. Fill in `.autobuild/config.yaml`:
    - `agents` (which provider plans, implements and reviews);
    - `git.protected_branches`;
-   - `paths`;
+   - `paths`, including the project-owned `docs/roadmap` root;
    - `validation.commands`, the checks Autobuild runs itself.
-3. Add `.autobuild/runs/*` and `!.autobuild/runs/.gitkeep` to `.gitignore`.
+2. Add `.autobuild/runs/*` and `!.autobuild/runs/.gitkeep` to `.gitignore`.
+3. Keep briefs below the configured roadmap root, normally as
+   `docs/roadmap/<milestone>/<implementation-brief>.md`.
 
 The full contract is [`schemas/config.schema.json`](schemas/config.schema.json).
 
@@ -69,7 +78,7 @@ Write them as argv lists (`command: [npm, test]`) with an optional `cwd`.
 Dependency directories your checks need but git ignores (for example `.venv`)
 go in `validation.runtime_paths`; they are mounted read-only from your checkout.
 
-## First-Time Validation
+Validate the project setup:
 
 Run from the project root (not from inside `.autobuild/`):
 
@@ -78,21 +87,63 @@ autobuild config .   # the config matches the schema and its safety rules
 autobuild agents .   # which provider fills each role, and its command
 ```
 
-## Running An Implementation
+## Plan An Implementation
+
+Start Claude Code or Codex from the project root:
 
 ```bash
-autobuild brief docs/roadmap/M1.md                          # the brief is complete and approved
-autobuild run docs/roadmap/M1.md --project . --dry-run      # every preflight check; creates nothing
-autobuild run docs/roadmap/M1.md --project .                # the run
+cd ~/your-project
+codex          # or: claude
 ```
 
-While and after a run:
+Ask it to use the implementation-planning workflow. Natural wording is fine:
+
+> Use the implementation-planning workflow. I want to plan the next milestone.
+> Do not finalize the brief until I approve the plan.
+
+The planner reads the project paths from `.autobuild/config.yaml`, inspects only
+the relevant state, ADRs, architecture and code, then discusses risks, scope,
+dependencies, acceptance criteria and GREEN/YELLOW/RED autonomy with you. It
+does not write an executable brief until you explicitly approve the plan.
+
+After approval, the planner writes the brief below `paths.roadmap` using the
+installed [`templates/implementation-brief.md`](templates/implementation-brief.md),
+updates the roadmap index, validates the brief and reports its autonomy gate.
+It stops there; planning never starts an Autobuild run.
+
+The `implementation-planning` skill is installed for both Claude Code and Codex,
+so you do not need to memorize a special command.
+
+## Execute The Approved Brief
+
+From the project root, using the path the planner reported:
 
 ```bash
+autobuild brief docs/roadmap/<milestone>/<brief>.md
+```
+
+The starter config requires a clean Git tree. After the brief validates, review
+and commit the approved roadmap files through your normal Git workflow; the
+planner does not commit them. Then:
+
+```bash
+autobuild run docs/roadmap/<milestone>/<brief>.md --project . --dry-run
+autobuild run docs/roadmap/<milestone>/<brief>.md --project .
+```
+
+The first command checks the brief schema and approval metadata. The dry-run
+checks the project config, autonomy gate, dependencies, providers, Git state and
+validation prerequisites without creating a branch, worktree or run. The final
+command starts the isolated implementation only after those checks pass.
+
+## Inspect And Control A Run
+
+```bash
+autobuild evidence .autobuild/runs/<run-id>            # verify controller-owned evidence
 autobuild stop <run-id> --project .                    # safe stop (needs control.provider: file)
-autobuild resume <run-id> --project . [--dry-run]      # explicit human resume
+autobuild resume <run-id> --project . --dry-run        # inspect an explicit resume
+autobuild resume <run-id> --project .                  # resume preserved work
 autobuild resume <run-id> --project . --override-limits  # after raising a budget in config.yaml
-autobuild evidence .autobuild/runs/<run-id>            # verify the run's evidence
 ```
 
 Each run ends with a report and leaves its branch and worktree for you to

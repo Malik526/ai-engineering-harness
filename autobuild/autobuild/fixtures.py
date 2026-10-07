@@ -77,7 +77,7 @@ def create_fixture(*, implementer: str, name: Optional[str] = None, root: Option
     if path.exists() or (root / f"{name}.worktrees").exists():
         raise FixtureError(f"{path} already exists")
 
-    for sub in ("docs/decisions", "docs/roadmap", ".autobuild/runs"):
+    for sub in ("docs/decisions", "docs/roadmap/verification", ".autobuild/runs"):
         (path / sub).mkdir(parents=True)
     (path / "docs/decisions/.gitkeep").write_text("")
     (path / ".autobuild/runs/.gitkeep").write_text("")
@@ -85,7 +85,9 @@ def create_fixture(*, implementer: str, name: Optional[str] = None, root: Option
     (path / ".gitignore").write_text(".autobuild/runs/*\n!.autobuild/runs/.gitkeep\n")
     for template in ("README.md", "AGENTS.md"):
         shutil.copyfile(_FIXTURE_TEMPLATES / template, path / template)
-    shutil.copyfile(_FIXTURE_TEMPLATES / "V-1.md", path / "docs/roadmap/V-1.md")
+    shutil.copyfile(TEMPLATE_DIR / "roadmap-README.md", path / "docs/roadmap/README.md")
+    brief = path / "docs/roadmap/verification/V-1.md"
+    shutil.copyfile(_FIXTURE_TEMPLATES / "V-1.md", brief)
     config = Template((_FIXTURE_TEMPLATES / "config.yaml").read_text()).substitute(implementer=implementer)
     (path / ".autobuild/config.yaml").write_text(config)
     if browser:
@@ -93,7 +95,7 @@ def create_fixture(*, implementer: str, name: Optional[str] = None, root: Option
         source = TEMPLATE_DIR / "browser-fixture"
         for filename in ("AGENTS.md", "package.json", "package-lock.json", "smoke.cjs", ".gitignore"):
             shutil.copyfile(source / filename, path / filename)
-        shutil.copyfile(source / "V-1.md", path / "docs/roadmap/V-1.md")
+        shutil.copyfile(source / "V-1.md", brief)
         document = load_yaml(config)
         document["validation"].update(browser_tool="playwright", commands=[
             {"name": "dependencies", "kind": "setup", "command": ["npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"],

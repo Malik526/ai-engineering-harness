@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from autobuild.cli import main
 from autobuild.core.artifacts import RUN_ARTIFACTS
 from autobuild.core.preflight import PreflightError, preflight
 from autobuild.core.runner import Runner
@@ -39,6 +40,41 @@ def test_successful_run_commits_on_run_branch_and_leaves_main(tmp_path, monkeypa
     assert "feature.txt" in git(root, "show", "--name-only", "--format=", state["last_commit"])
     # Main checkout is unaffected; worktree status is clean after the commit.
     assert git(root, "status", "--porcelain") == "" and git(worktree, "status", "--porcelain") == ""
+
+
+def test_approved_nested_brief_validates_and_dry_run_is_read_only(tmp_path, fake_registry, capsys):
+    root, brief = make_project(tmp_path)
+    head = git(root, "rev-parse", "HEAD").strip()
+
+    assert main(["brief", str(brief)]) == 0
+    assert main(["run", str(brief), "--project", str(root), "--dry-run"]) == 0
+
+    output = capsys.readouterr().out
+    assert "OK" in output and "Dry run: preflight passed; nothing was created." in output
+    assert git(root, "rev-parse", "HEAD").strip() == head
+    assert git(root, "status", "--porcelain") == ""
+    assert list((root / ".autobuild/runs").iterdir()) == [root / ".autobuild/runs/.gitkeep"]
+    assert not (root.parent / "proj.worktrees").exists()
+
+
+def test_completed_dependency_is_found_in_another_milestone_directory(tmp_path, fake_registry):
+    root, brief = make_project(tmp_path)
+    brief.write_text(brief.read_text().replace("depends_on: []", 'depends_on: ["T-0"]'))
+    previous_dir = root / "docs/roadmap/milestone-0"
+    previous_dir.mkdir()
+    previous = previous_dir / "T-0.md"
+    previous.write_text(
+        brief.read_text()
+        .replace('id: "T-1"', 'id: "T-0"')
+        .replace("title: Add feature file", "title: Establish prerequisite")
+        .replace("status: ready", "status: done")
+        .replace('depends_on: ["T-0"]', "depends_on: []")
+    )
+    git(root, "add", "-A")
+    git(root, "commit", "-q", "-m", "add cross-milestone dependency")
+
+    plan = preflight(brief, root)
+    assert plan.gate.may_continue
 
 
 def test_run_artifacts_follow_contract(tmp_path, monkeypatch, fake_registry):
@@ -184,7 +220,7 @@ def test_interrupt_stops_and_preserves(tmp_path, monkeypatch, fake_registry):
 
 def test_second_run_gets_distinct_branch_and_run_id(tmp_path, monkeypatch, fake_registry):
     root, outcome, _ = _run(tmp_path, monkeypatch)
-    second = Runner(preflight(root / "docs/roadmap/T-1.md", root)).run()
+    second = Runner(preflight(root / "docs/roadmap/milestone-1/T-1.md", root)).run()
     assert second.state["branch"] == "agent/T-1-add-feature-file-2"
     assert second.state["run_id"].endswith("-T-1-2") and second.state["state"] == "COMPLETED"
 

@@ -39,7 +39,8 @@ def test_create_makes_a_clean_marked_valid_fixture(root):
     assert _git(path, "status", "--porcelain") == ""  # marker lives in .git, never dirties the tree
     config = load_project_config(path)
     assert config.agents["implementer"].provider == "claude" and config.name == "Autobuild Fixture"
-    assert (path / "docs/roadmap/V-1.md").exists()
+    assert (path / "docs/roadmap/README.md").exists()
+    assert (path / "docs/roadmap/verification/V-1.md").exists()
     second = fixtures.create_fixture(implementer="claude")
     assert second.name == f"{path.name}-2"
 
@@ -57,7 +58,7 @@ def test_browser_fixture_is_clean_and_explicit(root):
     config = load_project_config(path)
     assert config.data["validation"]["browser_gates"][0]["command"] == ["node", "smoke.cjs"]
     assert (path / "package-lock.json").is_file()
-    assert "browser_required: true" in (path / "docs/roadmap/V-1.md").read_text()
+    assert "browser_required: true" in (path / "docs/roadmap/verification/V-1.md").read_text()
     assert _git(path, "status", "--porcelain") == ""
 
 
@@ -128,6 +129,10 @@ def _legacy(tmp_path: Path, name: str = "autobuild-fixture-0.2") -> Path:
     legacy = tmp_path / "home" / name
     legacy.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(["cp", "-r", str(path), str(legacy)], check=True)
+    nested_brief = legacy / "docs/roadmap/verification/V-1.md"
+    nested_brief.replace(legacy / "docs/roadmap/V-1.md")
+    nested_brief.parent.rmdir()
+    (legacy / "docs/roadmap/README.md").unlink()
     (legacy / ".git" / fixtures.MARKER).unlink()  # legacy fixtures had no marker
     return legacy
 

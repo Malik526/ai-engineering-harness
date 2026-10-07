@@ -2,6 +2,31 @@
 
 ## 2026-10-05
 
+### Autobuild - First-Class Planning And Brief Handoff
+
+- Made the user workflow explicit: discuss → refine → approve → write the
+  project-owned brief → validate → dry-run → run. The Autobuild README now
+  covers one-time setup, project adoption, interactive Claude/Codex planning,
+  execution, evidence, stop and resume from the project root.
+- Updated the canonical `implementation-planning` skill to use the configured
+  roadmap root, a short README index and milestone subdirectories. It still
+  requires explicit human approval before writing a ready brief, reuses the
+  existing brief template/schema, validates the result and stops before any
+  Autobuild run. For clean-tree projects it explicitly hands the approved
+  planning files back for human review and commit before dry-run.
+- Added a reusable roadmap README template. New disposable fixtures use
+  `docs/roadmap/verification/V-1.md`, validate the approved brief and prove a
+  dry-run creates no branch, worktree or run artifacts.
+- Completed dependencies are now discovered recursively below
+  `paths.roadmap`, so briefs in different milestone directories can depend on
+  one another without weakening the autonomy gate.
+- Installer tests now prove the planner skill is available through the shared,
+  Claude Code and Codex skill paths when those runtimes are installed.
+- Validation: 382 Autobuild tests and 93 setup/runtime tests pass; the
+  instruction audit and core contract check pass. A disposable Codex fixture's
+  nested brief passed `autobuild brief` and `autobuild run --dry-run`, which
+  created no run artifacts, branch or worktree.
+
 ### Setup - `autobuild` Command on PATH and Validation Portability Fixes
 
 - `install.py --apply` now links `~/.local/bin/autobuild` to the harness's

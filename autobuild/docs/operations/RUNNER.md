@@ -313,13 +313,14 @@ its worktrees in the sibling `<name>.worktrees`:
 
 ```bash
 autobuild fixture create --implementer codex     # → .test-runtime/live-<date>-codex
-cd <fixture> && autobuild run docs/roadmap/V-1.md --yes
+cd <fixture> && autobuild run docs/roadmap/verification/V-1.md --yes
 autobuild fixture list
 autobuild fixture clean --all                    # dry run: shows what would go
 autobuild fixture clean --all --yes              # delete
 ```
 
-A fixture is a fresh git repo on `main` with the standard V-1 brief
+A fixture is a fresh git repo on `main` with a roadmap index and the standard
+`docs/roadmap/verification/V-1.md` brief
 ("create `autobuild-test.txt` containing `Autobuild 0.2 verification`"),
 a controller validation command, checkpoint commits on, and the chosen
 provider in every role. Creation writes an ownership marker into

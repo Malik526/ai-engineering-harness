@@ -10,7 +10,7 @@ from autobuild.core.config import load_project_config
 from autobuild.common.front_matter import split_front_matter
 from autobuild.policy.implementations import brief_errors
 from autobuild.git.git_client import GitClient, GitError
-from autobuild.core.preflight import PreflightError, RunPlan, completed_from_siblings
+from autobuild.core.preflight import PreflightError, RunPlan, completed_from_roadmap
 from autobuild.validation.browser_contract import digest, safe_file
 from autobuild.control.file_control import FileStopController
 from autobuild.governance.governance import effective_config, exhausted_on_resume, limit_changes, without_overridable
@@ -81,7 +81,7 @@ def resume_preflight(run: Path, project_root: Path, *, override_limits: bool = F
             expected = f"browser/cycle-{record['attempt']:02d}/results.json"
             if record["artifact"] != expected or record["attempt"] > len(attempts):
                 issues.append("browser history has an inconsistent attempt/path")
-        gate = evaluate_gate(meta, completed_from_siblings(config.path("roadmap") / f"{meta['id']}.md"))
+        gate = evaluate_gate(meta, completed_from_roadmap(config.path("roadmap"), frozen))
         if not gate.may_continue:
             issues.extend(gate.reasons)
         if meta["id"] != state["implementation_id"] or directory.name != state["run_id"]:

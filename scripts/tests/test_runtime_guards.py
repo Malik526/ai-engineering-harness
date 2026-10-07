@@ -37,8 +37,14 @@ def test_fresh_install_check_and_audit(tmp_path, providers):
     audit = run("audit_instructions.py")
     assert audit.returncode == 0, audit.stdout + audit.stderr
     assert (home / ".agents/GIT.md").is_symlink()
+    shared_planner = home / ".agents/skills/implementation-planning"
+    assert shared_planner.is_symlink() and shared_planner.resolve() == (ROOT / "skills/custom/implementation-planning").resolve()
     for provider in ("claude", "codex"):
         assert (home / f".{provider}").exists() == (provider in providers)
+        planner = home / f".{provider}/skills/implementation-planning"
+        assert planner.exists() == (provider in providers)
+        if provider in providers:
+            assert planner.is_symlink() and planner.resolve() == shared_planner.resolve()
     command = home / ".local/bin/autobuild"
     assert command.is_symlink() and command.resolve() == (ROOT / "autobuild/bin/autobuild").resolve()
     assert "is not on PATH" in apply.stdout  # reported, never fixed by editing shell files

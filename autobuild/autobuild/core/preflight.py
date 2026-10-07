@@ -63,10 +63,10 @@ class RunPlan:
     limit_overrides: list[dict[str, Any]] = field(default_factory=list)  # human budget changes applied on resume
 
 
-def completed_from_siblings(brief_path: Path) -> set[str]:
-    """Ids of briefs next to `brief_path` whose status is done (the roadmap's record of completion)."""
+def completed_from_roadmap(roadmap_root: Path, brief_path: Path) -> set[str]:
+    """Ids of completed briefs anywhere under the configured roadmap root."""
     done = set()
-    for other in brief_path.parent.glob("*.md"):
+    for other in roadmap_root.rglob("*.md") if roadmap_root.is_dir() else ():
         if other.resolve() == brief_path.resolve():
             continue
         try:
@@ -103,7 +103,7 @@ def preflight(brief_path: Path, project_root: Path, *, base_branch: Optional[str
     warnings: list[str] = []
 
     # 3. Autonomy
-    gate = evaluate_gate(meta, completed_from_siblings(brief_path))
+    gate = evaluate_gate(meta, completed_from_roadmap(config.path("roadmap"), brief_path))
     if not gate.may_continue:
         issues += [f"autonomy: {r}" for r in gate.reasons]
 

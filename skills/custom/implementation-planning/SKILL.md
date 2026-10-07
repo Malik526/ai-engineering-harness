@@ -36,7 +36,8 @@ conversation are fine.
 Read the project's `AGENTS.md`, then only the ADRs, project state, evaluations
 and code paths that touch the subject. Find them through `.autobuild/config.yaml`
 `paths` (`roadmap`, `project_state`, `adr_directory`). Don't scan the whole
-repository.
+repository. Read the roadmap root's `README.md` when present; it defines the
+project's brief layout and naming convention.
 
 ## 3. Shape the Work
 
@@ -61,9 +62,21 @@ YELLOW item into a GREEN part and a small YELLOW gate is often the best plan.
 
 ## 5. Maintain the Roadmap
 
-Keep the roadmap under the project's `paths.roadmap`: one file that lists the
-implementations in order, with id, title, autonomy and status. Update it when
-the plan changes. Don't silently reorder or drop items. Say what changed.
+Keep planning artifacts under the project's `paths.roadmap`. Prefer this
+project-owned layout unless its roadmap README defines a stricter convention:
+
+```text
+docs/roadmap/
+  README.md
+  <milestone>/
+    <implementation-brief>.md
+```
+
+The README is the short index: implementations in order, with id, title,
+autonomy, status and brief link. The brief carries the executable contract.
+Do not duplicate the project's narrative roadmap or project state into either
+file. Update the index when an approved plan adds or changes briefs. Don't
+silently reorder or drop items; say what changed.
 
 ## 6. Write Briefs Only After Explicit Approval
 
@@ -73,11 +86,28 @@ one point isn't approval of the plan. If unsure, ask.
 
 When approved:
 
-1. Write each brief from `templates/implementation-brief.md`: YAML front matter, then the required sections.
-2. Set `status: ready` and add `approval: {approved_by: human, approved_at: "<YYYY-MM-DD>"}`. Items still under discussion stay `status: draft` with no approval block.
-3. Validate every brief with `~/.agents/autobuild/bin/autobuild brief <files>` and fix all errors.
-4. Show the gate result for the first item with `~/.agents/autobuild/bin/autobuild gate <brief> --done <completed ids>`.
-5. Summarize for the human: items, classes, human actions needed and the first item the controller would run.
+1. Resolve the roadmap root from `.autobuild/config.yaml` and follow its
+   `README.md` layout. Create a milestone subdirectory when the project uses
+   them.
+2. Write each brief from `templates/implementation-brief.md`: YAML front
+   matter, then the required sections. Do not invent a second brief format.
+3. Set `status: ready` and add
+   `approval: {approved_by: human, approved_at: "<YYYY-MM-DD>"}`. Items still
+   under discussion stay in the conversation; do not write draft files unless
+   the human explicitly asks to persist a draft.
+4. Update the roadmap README index for the approved briefs.
+5. Validate every brief with `autobuild brief <files>` and fix all errors.
+6. Show the gate result for the first item with
+   `autobuild gate <brief> --done <completed ids>`.
+7. Summarize for the human: items, classes, human actions needed, the first
+   item the controller would run, and the exact dry-run command.
+
+Stop there. Writing or validating a brief does not authorize
+`autobuild run`; the human starts the dry-run and real run separately. When
+`.autobuild/config.yaml` sets `require_clean_git_before_start: true`, tell the
+human that the approved roadmap and brief changes must be reviewed and
+committed before dry-run. Do not make that commit unless the human explicitly
+asks under the normal Git policy.
 
 ## Never
 

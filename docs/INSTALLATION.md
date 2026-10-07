@@ -57,6 +57,13 @@ Verify with `which autobuild` (expect `~/.local/bin/autobuild`) and
 `CONFLICT` and left untouched. The command needs no agent provider, so it
 installs the same way for Claude-only, Codex-only, both or neither.
 
+Setup also links the canonical `implementation-planning` skill into the shared
+agent skill directory and into each installed provider's skill directory. Start
+`claude` or `codex` from a configured project root and ask to use the
+implementation-planning workflow; the skill holds approved briefs until the
+human explicitly approves the plan. The complete project setup, planning and
+execution walkthrough is in [`autobuild/README.md`](../autobuild/README.md).
+
 ## Existing Machine (Migration)
 
 When a runtime path already holds a regular file identical to the canonical
