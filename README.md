@@ -5,6 +5,35 @@ engineering workflow: global agent policies, custom skills, and the
 `autobuild` framework. Agent runtimes (Claude Code, Codex) consume these
 files through symlinks. Nothing here belongs to a single application.
 
+## What You Get
+
+- **The base harness** works on its own:
+  - shared engineering policies (`policies/global/`) that Claude Code and Codex both load through thin adapters
+  - deterministic safeguards: runtime commit guards, an instruction-chain audit, and a manual completion check agents run before reporting work done
+  - reusable workflow skills
+- **Autobuild** (`autobuild/`) is optional. It runs one approved brief through an implementer agent and an independent reviewer agent in an isolated worktree. You don't need it to use the base harness.
+
+## Quick Start
+
+You need Git and Python 3. Claude Code and/or Codex are detected if installed.
+`--check` is read-only. `--apply` links files into `~/.agents`, `~/.local/bin`
+and your installed providers' config directories, and merges harness-owned
+sections into existing Claude/Codex config without replacing it. Run `--check`
+first to see what it will touch.
+
+```bash
+git clone https://github.com/Malik526/ai-engineering-harness.git ~/ai-engineering-harness
+cd ~/ai-engineering-harness
+python3 scripts/setup/install.py --check
+python3 scripts/setup/install.py --apply
+python3 scripts/setup/audit_instructions.py
+```
+
+That installs the base harness. [docs/INSTALLATION.md](docs/INSTALLATION.md)
+covers each step, setup statuses, and migrating a machine that already has
+these files. To use Autobuild as well, follow
+[autobuild/README.md](autobuild/README.md).
+
 ## What Belongs Here
 
 - **Global policies** (`policies/global/`): vendor-neutral coding, documentation, execution, git, security and verification rules.

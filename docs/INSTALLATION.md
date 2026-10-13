@@ -4,10 +4,16 @@
 clone → install.py --apply → core links → available provider skills/guards/adapters → audit
 ```
 
+## Requirements
+
+- Git and Python 3. The setup and audit scripts use only the standard library.
+- Claude Code and/or Codex, if you want their adapters, skills and guards
+  configured. Neither is required to run setup.
+
 ## New Machine
 
 ```bash
-git clone <private-remote> ~/ai-engineering-harness
+git clone https://github.com/Malik526/ai-engineering-harness.git ~/ai-engineering-harness
 python3 ~/ai-engineering-harness/scripts/setup/install.py --check
 python3 ~/ai-engineering-harness/scripts/setup/install.py --apply
 python3 ~/ai-engineering-harness/scripts/setup/audit_instructions.py
@@ -17,6 +23,13 @@ Setup detects `claude` and `codex` on `PATH`. Claude-only, Codex-only, both,
 and neither installations are supported. Missing providers are skipped, including
 their runtime-specific skill links. Core policies and shared skills always install.
 Rerun setup after installing a provider.
+
+These docs assume the clone lives at `~/ai-engineering-harness`. Setup resolves
+its own location, so another path works if you substitute it in the commands.
+
+This is the complete base harness: policies, skills, adapters, commit guards and
+the instruction audit. Autobuild is optional. Setup links its command (below),
+but nothing runs until you create its virtualenv and adopt it in a project.
 
 Setup creates missing adapters or appends the canonical managed policy-reference
 block to existing adapters. Personal routing remains intact. Codex's block
@@ -28,16 +41,19 @@ The real-home setup honors `CODEX_HOME` and `CLAUDE_CONFIG_DIR`. Use
 `--home /isolated/home` for a fresh-home simulation; this ignores those overrides
 and uses the providers available on `PATH`. It does not copy authentication.
 
-### The `autobuild` command
+### The `autobuild` command (optional)
 
-Setup links the Autobuild CLI as a user-local command:
+Skip this section if you don't plan to use Autobuild. Setup links the Autobuild
+CLI as a user-local command either way:
 
 ```text
 ~/.local/bin/autobuild -> ~/ai-engineering-harness/autobuild/bin/autobuild
 ```
 
 The wrapper resolves its own symlink, so it always runs the harness copy with
-the harness's `autobuild/.venv`. That virtualenv is created once:
+the harness's `autobuild/.venv`. That virtualenv is created once, only if you
+want to run Autobuild. The manual completion check can also use it as a
+`jsonschema` fallback (see [Manual completion layer](#manual-completion-layer)):
 
 ```bash
 cd ~/ai-engineering-harness/autobuild

@@ -1,5 +1,29 @@
 # AI Engineering Harness — Changelog
 
+## 2026-10-12
+
+### Docs - Public Installation Path
+
+- Replaced the `git clone <private-remote>` placeholder in
+  `docs/INSTALLATION.md` with the public repository URL
+  (`https://github.com/Malik526/ai-engineering-harness.git`). The clone
+  target stays `~/ai-engineering-harness`, which all other docs assume.
+- Added "What You Get" and "Quick Start" sections to the README. Quick Start
+  covers clone, `install.py --check`/`--apply` and the instruction audit,
+  says what `--apply` touches, and links to `docs/INSTALLATION.md` for
+  details and to `autobuild/README.md` for Autobuild.
+- Stated that the base harness is usable on its own and Autobuild is optional,
+  in both the README and `docs/INSTALLATION.md` (new Requirements section;
+  the `autobuild` command section is marked optional, noting that the manual
+  completion check can still use its venv as a `jsonschema` fallback).
+- No code, setup behavior or Autobuild behavior changed.
+- Validation: no `<private-remote>` matches remain; both clone commands use the
+  same URL; all relative links in the two docs resolve. An unauthenticated
+  clone of the public repo, then `install.py --apply` in an isolated
+  `--home`, passed `install.py --check` with no Autobuild venv. The instruction
+  audit passes and 93 setup/runtime tests pass. No secret patterns were found
+  in tracked files.
+
 ## 2026-10-05
 
 ### Autobuild - First-Class Planning And Brief Handoff
