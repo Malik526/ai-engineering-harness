@@ -1,9 +1,27 @@
 # Manual completion
 
-Run once after implementation, verification and documentation reconciliation,
-before the final summary. This shared check never stages, commits, creates
-branches/worktrees or enters a controller loop. GIT.md governs final reporting.
-EXECUTION, DOCUMENTATION, VERIFICATION and SECURITY remain the policy authorities.
+Run after implementation and documentation reconciliation, before the final
+summary. This shared check never stages, commits, creates branches/worktrees or
+enters a controller loop. GIT.md governs final reporting. EXECUTION,
+DOCUMENTATION, VERIFICATION and SECURITY remain the policy authorities.
+
+## Workflow: one final validation run
+
+1. Implement, running focused checks as needed (the test files, lint or type
+   check for what you are changing). Don't run the full final suites yourself.
+2. Finish the code and the documentation reconciliation, including the changelog.
+   The fingerprint covers every changed file, so any later edit means a new run.
+   Write validation notes in documentation without exact counts (for example
+   "web suite, lint and build pass"); the counts belong in the summary. A project
+   that requires counts in its changelog accepts one extra run after adding them.
+3. Take a snapshot and write the reconciliation JSON with its fingerprint.
+4. Choose the final validation commands (see "Choosing commands" below).
+5. Run the check with `--run-validation`. This is the final comprehensive
+   verification VERIFICATION.md requires; its evidence is what you report.
+6. If the check reports NEEDS_ATTENTION, fix what it names and run the same
+   command again. Unchanged, still-passing evidence is reused, not rerun.
+7. Write the completion summary from the check's result and evidence (commands,
+   statuses, counts from the output summaries), with GIT.md's recommended commit.
 
 Use a fresh task-local directory outside the repository (for example a directory
 created by `mktemp -d`). Run from the project root:
@@ -14,6 +32,8 @@ python3 ~/.agents/manual-completion/complete.py --evidence /tmp/task/evidence.js
   --reconciliation /tmp/task/reconciliation.json --commands /tmp/task/commands.json \
   --run-validation
 ```
+
+The second command is the same for the first run and every recheck.
 
 Create the directory before running. Validation specs use the existing config
 schema and its `jsonschema` dependency; use the harness Autobuild venv Python
@@ -45,11 +65,29 @@ investigation-only changes to authoritative facts. Updated entries must name an
 actually changed documentation path. The script verifies presence and freshness,
 not conceptual correctness. Do not copy the example's reasons blindly.
 
+## Choosing commands
+
 `commands.json` is a JSON list using existing Autobuild `validation.commands`
 specs. Reuse applicable specs from `.autobuild/config.yaml` or the project's
-existing test/typecheck/lint/build/local runtime commands. Include runtime smoke
-checks when VERIFICATION.md requires them. Do not run unsafe commands merely to
-satisfy completion. Example:
+existing test/typecheck/lint/build/local runtime commands, plus any check the
+project's own instructions require (for example a production build). Include
+runtime smoke checks when VERIFICATION.md requires them. Do not run unsafe
+commands merely to satisfy completion.
+
+Keep the set proportional to what changed and what depends on it, following
+VERIFICATION.md's risk-based scope and the project's testing instructions:
+
+- documentation only: no commands; Git safety and documentation checks still run;
+- code in one area: that area's full suites (tests, lint, typecheck, build);
+  leave out suites for areas that share no code with the change;
+- shared behavior, cross-module contracts, persistence, storage, authentication,
+  security or build/deployment configuration: broaden to every affected area and
+  the integration configuration the project documents (for example tests that
+  need a database).
+
+A spec's `paths` filter records the command as skipped when no changed file
+matches. Record every left-out category in `validation_scope` with a specific
+reason. Example:
 
 ```json
 [{"name": "tests", "kind": "test", "run": "python3 -m pytest", "required": true}]
@@ -75,10 +113,33 @@ local execution is applicable and safe. One command may cover multiple kinds.
 The existing validation runner supports `cwd`, `env`, `timeout_seconds` and
 `paths`; unmatched path filters are recorded as skipped. Required failed/error/
 timeout results block completion. All applicable specs must be supplied; choosing
-applicability remains semantic. Without `--run-validation`, the check only reads
-previous evidence and verifies repository/configuration fingerprints. Validation
-that changes repository content requires reconciliation and fresh validation.
-The manual report labels evidence as manual rather than controller-owned.
+applicability remains semantic. Validation that changes repository content requires
+reconciliation and fresh validation. The manual report labels evidence as manual
+rather than controller-owned. Results from commands the agent ran itself are never
+evidence; only this check's own run is.
+
+## When validation runs, is reused or is skipped
+
+The result's `validation_run` says what happened, with `validation_run_reason`:
+
+- `blocked`: a check that doesn't depend on test results already fails (stale or
+  missing reconciliation fingerprint, unacknowledged changed files, conflicts or
+  an in-progress Git operation, secret-like files, incomplete documentation or
+  validation applicability). No command runs; fix the issues and rerun.
+- `reused`: `--run-validation` found stored evidence for the same repository
+  root, fingerprint and exact command list, with every required command passed,
+  the same environment digest, recorded within the last hour. Nothing reruns.
+- `executed`: the commands ran, because there was no stored evidence, or it
+  failed, or the repository, commands or environment changed, or it is older
+  than an hour, or `--fresh-validation` was given.
+- `not_requested`: commands were given without `--run-validation`; stored
+  evidence is only read. `not_applicable`: no commands were given.
+
+The environment digest is a one-way hash of the environment variables except
+shell bookkeeping (`PWD`, `OLDPWD`, `SHLVL`, `_`); values are never stored.
+Changes Git and the environment don't show, such as installing dependencies into
+an ignored directory or upgrading a tool, are not detected: add
+`--fresh-validation` after them.
 
 For documentation/analysis-only work omit `--commands`. Non-document filenames
 are conservatively treated as executable changes; for genuinely non-executable

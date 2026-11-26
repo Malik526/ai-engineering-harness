@@ -1,5 +1,33 @@
 # AI Engineering Harness — Changelog
 
+## 2026-11-25
+
+### Manual Development - One Final Validation Run With Evidence Reuse
+
+- Manual completion's `--run-validation` run is now the final comprehensive
+  validation in manual development. `scripts/manual/README.md` describes the
+  workflow (focused checks while implementing, documentation before the run, one
+  run, rechecks reuse evidence) and proportional command selection from project
+  validation definitions, with left-out categories recorded in `validation_scope`.
+  Both adapter fragments and `policies/global/VERIFICATION.md` say the same;
+  Autobuild keeps its own controller validation.
+- `complete.py` runs every check that doesn't depend on test results first. If
+  any fails (stale reconciliation, unacknowledged files, conflicts, in-progress Git
+  operation, secret-like files, incomplete documentation or validation
+  applicability), no command runs (`validation_run: blocked`).
+- `--run-validation` reuses stored evidence when the root, fingerprint and exact
+  command list match, every required command passed, the environment digest
+  matches and the run is at most an hour old. It runs otherwise, and always with
+  the new `--fresh-validation`. Evidence now records `environment` (a one-way
+  digest; values are never stored) and `recorded_at`; older evidence reruns.
+- Results report `validation_run` and `validation_run_reason`; existing fields,
+  freshness checks and the commit-recommendation flag are unchanged. Results the
+  agent reports itself are still never evidence.
+- Docs: ADR 0003 addendum, manual completion evaluation (2026-11-25), policy
+  enforcement matrix.
+- Validation: harness and Autobuild suites pass (14 new manual completion
+  fixtures); the installer updated both adapters and the instruction audit passes.
+
 ## 2026-10-12
 
 ### Docs - Public Installation Path

@@ -177,3 +177,10 @@ The returned recommendation flag reinforces GIT.md without copying commit policy
 Both adapters share the same instruction and script; invocation and actual final
 reply formatting remain model compliance. No automatic commit or repair loop.
 See [fixture evaluation](MANUAL_COMPLETION_EVALUATION.md) and ADR 0003.
+
+2026-11-25: checks that don't depend on test results now run first and block
+validation when they fail (`validation_run: blocked`); `--run-validation` reuses
+fresh passing evidence for the same root, fingerprint, commands and environment
+digest within an hour, and `--fresh-validation` forces a run. VERIFICATION.md and
+both adapters make this run the final manual verification. Command selection and
+proportional scope remain semantic (`validation_scope`). See the ADR 0003 addendum.

@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 
 import pytest
 
@@ -176,3 +177,172 @@ def test_validation_command_change_invalidates_evidence(repo, tmp_path):
     check(repo, tmp_path, run=True)
     commands = [{**COMMANDS[0], 'run': 'python3 -c "exit(1)"'}]
     assert 'required validation missing or stale' in check(repo, tmp_path, commands=commands)['issues']
+
+
+# --- Run ordering and evidence reuse (2026-11-25) ---
+
+def counting_commands(tmp_path, exit_code=0):
+    """A command that records each execution in a file outside the repository."""
+    counter = tmp_path / 'runs.log'
+    script = f"open({str(counter)!r}, 'a').write('x'); raise SystemExit({exit_code})"
+    return counter, [{'name': 'tests', 'kind': 'test', 'command': ['python3', '-c', script], 'required': True}]
+
+
+def executions(counter):
+    return len(counter.read_text()) if counter.exists() else 0
+
+
+def test_stale_reconciliation_blocks_validation(repo, tmp_path):
+    counter, commands = counting_commands(tmp_path)
+    rec = reconcile(repo)
+    (repo / 'app.py').write_text('print(1)\n')  # reconciliation fingerprint is now stale
+    result = check(repo, tmp_path, rec, commands=commands, run=True)
+    assert result['validation_run'] == 'blocked'
+    assert 'documentation reconciliation missing or stale' in result['issues']
+    assert executions(counter) == 0
+    assert not (tmp_path / 'evidence.json').exists()
+
+
+def test_unacknowledged_file_blocks_validation(repo, tmp_path):
+    counter, commands = counting_commands(tmp_path)
+    (repo / 'app.py').write_text('print(1)\n')
+    rec = reconcile(repo)
+    rec['expected_paths'] = []
+    result = check(repo, tmp_path, rec, commands=commands, run=True)
+    assert result['validation_run'] == 'blocked'
+    assert executions(counter) == 0
+
+
+def test_conflict_and_secret_file_block_validation(repo, tmp_path):
+    counter, commands = counting_commands(tmp_path)
+    (repo / '.git' / 'MERGE_HEAD').write_text('fixture\n')
+    (repo / '.env').write_text('PLACEHOLDER=example\n')
+    result = check(repo, tmp_path, commands=commands, run=True)
+    assert result['validation_run'] == 'blocked'
+    assert 'Git operation in progress' in result['issues']
+    assert any(issue.startswith('secret-like files') for issue in result['issues'])
+    assert executions(counter) == 0
+
+
+def test_run_validation_reuses_fresh_passing_evidence(repo, tmp_path):
+    counter, commands = counting_commands(tmp_path)
+    (repo / 'app.py').write_text('print(1)\n')
+    first = check(repo, tmp_path, commands=commands, run=True)
+    assert (first['status'], first['validation_run']) == ('PASS', 'executed')
+    second = check(repo, tmp_path, commands=commands, run=True)
+    assert (second['status'], second['validation_run']) == ('PASS', 'reused')
+    assert second['validation'] == first['validation']
+    assert second['commit_recommendation_required']
+    assert executions(counter) == 1
+
+
+def test_failed_evidence_is_rerun(repo, tmp_path):
+    counter, commands = counting_commands(tmp_path, exit_code=1)
+    (repo / 'app.py').write_text('print(1)\n')
+    assert check(repo, tmp_path, commands=commands, run=True)['status'] == 'NEEDS_ATTENTION'
+    again = check(repo, tmp_path, commands=commands, run=True)
+    assert (again['validation_run'], again['validation_run_reason']) == ('executed', 'stored run did not pass')
+    assert executions(counter) == 2
+
+
+def test_repository_change_is_rerun(repo, tmp_path):
+    counter, commands = counting_commands(tmp_path)
+    (repo / 'app.py').write_text('print(1)\n')
+    check(repo, tmp_path, commands=commands, run=True)
+    (repo / 'app.py').write_text('print(2)\n')
+    again = check(repo, tmp_path, commands=commands, run=True)
+    assert (again['status'], again['validation_run']) == ('PASS', 'executed')
+    assert again['validation_run_reason'] == 'repository changed since the stored run'
+    assert executions(counter) == 2
+
+
+def test_command_change_is_rerun(repo, tmp_path):
+    counter, commands = counting_commands(tmp_path)
+    (repo / 'app.py').write_text('print(1)\n')
+    check(repo, tmp_path, commands=commands, run=True)
+    changed = [{**commands[0], 'timeout_seconds': 60}]
+    again = check(repo, tmp_path, commands=changed, run=True)
+    assert again['validation_run_reason'] == 'validation commands changed'
+    assert executions(counter) == 2
+
+
+def test_environment_change_is_rerun(repo, tmp_path, monkeypatch):
+    counter, commands = counting_commands(tmp_path)
+    (repo / 'app.py').write_text('print(1)\n')
+    check(repo, tmp_path, commands=commands, run=True)
+    monkeypatch.setenv('DATABASE_URL', 'postgresql://fixture.invalid/db')
+    again = check(repo, tmp_path, commands=commands, run=True)
+    assert again['validation_run_reason'] == 'environment changed since the stored run'
+    assert executions(counter) == 2
+
+
+def test_volatile_shell_variables_do_not_block_reuse(repo, tmp_path, monkeypatch):
+    counter, commands = counting_commands(tmp_path)
+    (repo / 'app.py').write_text('print(1)\n')
+    check(repo, tmp_path, commands=commands, run=True)
+    monkeypatch.setenv('PWD', '/elsewhere')
+    monkeypatch.setenv('OLDPWD', '/before')
+    assert check(repo, tmp_path, commands=commands, run=True)['validation_run'] == 'reused'
+    assert executions(counter) == 1
+
+
+def test_old_evidence_is_rerun(repo, tmp_path):
+    counter, commands = counting_commands(tmp_path)
+    (repo / 'app.py').write_text('print(1)\n')
+    check(repo, tmp_path, commands=commands, run=True)
+    evidence = tmp_path / 'evidence.json'
+    record = json.loads(evidence.read_text())
+    record['recorded_at'] = '2020-01-01T00:00:00+00:00'
+    evidence.write_text(json.dumps(record))
+    again = check(repo, tmp_path, commands=commands, run=True)
+    assert again['validation_run'] == 'executed'
+    assert 'reuse window' in again['validation_run_reason']
+    assert executions(counter) == 2
+
+
+def test_evidence_without_reuse_metadata_is_rerun(repo, tmp_path):
+    counter, commands = counting_commands(tmp_path)
+    (repo / 'app.py').write_text('print(1)\n')
+    check(repo, tmp_path, commands=commands, run=True)
+    evidence = tmp_path / 'evidence.json'
+    record = json.loads(evidence.read_text())
+    del record['environment'], record['recorded_at']  # evidence written before reuse existed
+    evidence.write_text(json.dumps(record))
+    assert check(repo, tmp_path, commands=commands, run=True)['validation_run'] == 'executed'
+    assert executions(counter) == 2
+
+
+def test_fresh_validation_always_runs(repo, tmp_path):
+    counter, commands = counting_commands(tmp_path)
+    (repo / 'app.py').write_text('print(1)\n')
+    check(repo, tmp_path, commands=commands, run=True)
+    again = complete.evaluate(repo, tmp_path / 'evidence.json', reconcile(repo), commands, True, True)
+    assert (again['validation_run'], again['validation_run_reason']) == ('executed', 'fresh validation requested')
+    assert executions(counter) == 2
+
+
+def test_check_without_run_reports_not_requested(repo, tmp_path):
+    counter, commands = counting_commands(tmp_path)
+    (repo / 'app.py').write_text('print(1)\n')
+    check(repo, tmp_path, commands=commands, run=True)
+    result = check(repo, tmp_path, commands=commands)
+    assert (result['status'], result['validation_run']) == ('PASS', 'not_requested')
+    assert check(repo, tmp_path, commands=[])['validation_run'] == 'not_applicable'
+    assert executions(counter) == 1
+
+
+def test_cli_fresh_validation_flag(repo, tmp_path):
+    counter, commands = counting_commands(tmp_path)
+    (repo / 'app.py').write_text('print(1)\n')
+    (tmp_path / 'rec.json').write_text(json.dumps(reconcile(repo)))
+    (tmp_path / 'cmds.json').write_text(json.dumps(commands))
+    def cli(*extra):
+        done = subprocess.run([sys.executable, str(ROOT / 'scripts/manual/complete.py'), '--root', str(repo),
+                               '--evidence', str(tmp_path / 'evidence.json'), '--reconciliation', str(tmp_path / 'rec.json'),
+                               '--commands', str(tmp_path / 'cmds.json'), '--run-validation', *extra],
+                              capture_output=True, text=True)
+        return json.loads(done.stdout)
+    assert cli()['validation_run'] == 'executed'
+    assert cli()['validation_run'] == 'reused'
+    assert cli('--fresh-validation')['validation_run'] == 'executed'
+    assert executions(counter) == 2

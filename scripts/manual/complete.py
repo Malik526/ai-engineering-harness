@@ -3,8 +3,11 @@
 
 Reuse Autobuild validation and filename safety checks without entering its controller.
 Evidence is task-local; documentation applicability remains an agent assertion.
+Validation runs only when no other completion blocker is found, and `--run-validation`
+reuses fresh passing evidence for the identical repository, commands and environment.
 """
 import argparse
+from datetime import datetime, timezone
 import hashlib
 import json
 import os
@@ -17,6 +20,12 @@ from autobuild.policy.secret_files import secret_like
 
 AREAS = ('changelog', 'project_state', 'evaluation_results', 'known_limitations',
          'architectural_decisions', 'implementation_documentation')
+
+# Reuse window for passing evidence: long enough to fix reconciliation and recheck,
+# short enough that untracked drift (dependency installs, tool upgrades) stays unlikely.
+REUSE_MAX_AGE_SECONDS = 3600
+# Shell bookkeeping that differs between otherwise identical invocations.
+VOLATILE_ENVIRONMENT = frozenset({'PWD', 'OLDPWD', 'SHLVL', '_'})
 
 
 def git(root, *args):
@@ -52,7 +61,42 @@ def snapshot(root):
     return {'files': rows, 'fingerprint': digest.hexdigest()}
 
 
-def evaluate(root, evidence, reconciliation, commands, run=False):
+def environment_digest(environ=None):
+    """One-way digest of the validation environment; values are hashed, never stored."""
+    environ = os.environ if environ is None else environ
+    digest = hashlib.sha256()
+    for name in sorted(environ):
+        if name in VOLATILE_ENVIRONMENT:
+            continue
+        value = hashlib.sha256(environ[name].encode(errors='surrogateescape')).digest()
+        digest.update(name.encode(errors='surrogateescape') + b'\0' + value)
+    return digest.hexdigest()
+
+
+def reuse_refusal(record, root, state, commands, now=None):
+    """Why stored evidence can't stand in for a new run, or None when it can."""
+    if not record:
+        return 'no stored evidence'
+    if record.get('root') != str(root) or record.get('fingerprint') != state['fingerprint']:
+        return 'repository changed since the stored run'
+    if record.get('commands_config') != commands:
+        return 'validation commands changed'
+    results = (record.get('validation') or {}).get('commands') or []
+    if any(r.get('required') and r.get('status') not in ('PASS', 'SKIPPED') for r in results):
+        return 'stored run did not pass'
+    if record.get('environment') != environment_digest():
+        return 'environment changed since the stored run'
+    try:
+        recorded = datetime.fromisoformat(record['recorded_at'])
+    except (KeyError, TypeError, ValueError):
+        return 'stored run has no usable timestamp'
+    age = ((now or datetime.now(timezone.utc)) - recorded).total_seconds()
+    if not 0 <= age <= REUSE_MAX_AGE_SECONDS:
+        return f'stored run is outside the {REUSE_MAX_AGE_SECONDS}s reuse window'
+    return None
+
+
+def evaluate(root, evidence, reconciliation, commands, run=False, fresh=False):
     if commands:
         # Reuse the existing command schema, including safe log names and cwd paths.
         from jsonschema import Draft7Validator
@@ -95,17 +139,33 @@ def evaluate(root, evidence, reconciliation, commands, run=False):
             names = scope.get('commands', [])
             if not (names and all(name in required for name in names)) and not scope.get('not_applicable'):
                 issues.append('reconcile validation applicability: ' + kind)
-    if run and commands and not unsafe:
-        from autobuild.validation.validation_runner import run_validation
-        before = state['fingerprint']
-        outcome = run_validation(run_id='manual', commands=commands, project_root=root,
-                                 worktree=root, changed_files=paths, run_dir=evidence.parent, manual_host=True)
-        outcome.document['producer'] = 'manual'
-        record = {'root': str(root), 'fingerprint': before, 'commands_config': commands,
-                  'validation': outcome.document}
-        evidence.write_text(json.dumps(record, indent=2) + '\n')
-        if snapshot(root)['fingerprint'] != before:
-            issues.append('validation changed repository; reconcile and rerun')
+    expected = reconciliation.get('expected_paths', [])
+    unexpected = sorted(set(paths) - set(expected))
+    if unexpected:
+        issues.append('unacknowledged changed files: ' + ', '.join(unexpected))
+    # Every check above is cheap and independent of validation results. When any of them
+    # already blocks completion, running the (possibly long) commands can't produce PASS.
+    validation_run, validation_reason = ('not_requested', None) if commands else ('not_applicable', None)
+    if run and commands:
+        stored = json.loads(evidence.read_text()) if evidence.exists() else {}
+        refusal = 'fresh validation requested' if fresh else reuse_refusal(stored, root, state, commands)
+        if issues:
+            validation_run, validation_reason = 'blocked', 'completion blockers found before validation'
+        elif refusal is None:
+            validation_run, validation_reason = 'reused', 'stored evidence matches repository, commands and environment'
+        else:
+            from autobuild.validation.validation_runner import run_validation
+            before = state['fingerprint']
+            outcome = run_validation(run_id='manual', commands=commands, project_root=root,
+                                     worktree=root, changed_files=paths, run_dir=evidence.parent, manual_host=True)
+            outcome.document['producer'] = 'manual'
+            record = {'root': str(root), 'fingerprint': before, 'commands_config': commands,
+                      'environment': environment_digest(),
+                      'recorded_at': datetime.now(timezone.utc).isoformat(), 'validation': outcome.document}
+            evidence.write_text(json.dumps(record, indent=2) + '\n')
+            validation_run, validation_reason = 'executed', refusal
+            if snapshot(root)['fingerprint'] != before:
+                issues.append('validation changed repository; reconcile and rerun')
     record = json.loads(evidence.read_text()) if evidence.exists() else {}
     if commands:
         if record.get('root') != str(root) or record.get('fingerprint') != state['fingerprint'] or record.get('commands_config') != commands:
@@ -114,12 +174,9 @@ def evaluate(root, evidence, reconciliation, commands, run=False):
             for result in record['validation']['commands']:
                 if result['required'] and result['status'] not in ('PASS', 'SKIPPED'):
                     issues.append('required validation did not pass: ' + result['name'])
-    expected = reconciliation.get('expected_paths', [])
-    unexpected = sorted(set(paths) - set(expected))
-    if unexpected:
-        issues.append('unacknowledged changed files: ' + ', '.join(unexpected))
     return {'status': 'NEEDS_ATTENTION' if issues else 'PASS', **state, 'issues': issues,
             'validation': record.get('validation'),
+            'validation_run': validation_run, 'validation_run_reason': validation_reason,
             'commit_recommendation_required': bool(paths) and not reconciliation.get('human_requested_commit', False),
             'commit_policy': '~/.agents/GIT.md'}
 
@@ -134,7 +191,10 @@ def main():
     parser.add_argument('--evidence', type=Path)
     parser.add_argument('--reconciliation', type=Path)
     parser.add_argument('--commands', type=Path, help='JSON list of existing validation command specs')
-    parser.add_argument('--run-validation', action='store_true')
+    parser.add_argument('--run-validation', action='store_true',
+                        help='run the commands, or reuse fresh passing evidence for the same state')
+    parser.add_argument('--fresh-validation', action='store_true',
+                        help='with --run-validation, always run (e.g. after installing dependencies)')
     args = parser.parse_args()
     try:
         root = Path(git(args.root, 'rev-parse', '--show-toplevel').decode().strip()).resolve()
@@ -144,7 +204,8 @@ def main():
             if not args.evidence or not args.reconciliation:
                 parser.error('--evidence and --reconciliation are required for completion')
             commands = json.loads(args.commands.read_text()) if args.commands else []
-            result = evaluate(root, args.evidence, json.loads(args.reconciliation.read_text()), commands, args.run_validation)
+            result = evaluate(root, args.evidence, json.loads(args.reconciliation.read_text()), commands,
+                              args.run_validation, args.fresh_validation)
         print(json.dumps(result, indent=2))
         return int(result.get('status') == 'NEEDS_ATTENTION')
     except (OSError, ValueError, KeyError, TypeError, AttributeError, ImportError, subprocess.SubprocessError) as exc:

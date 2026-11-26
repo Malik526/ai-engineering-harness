@@ -11,6 +11,11 @@ This file is the vendor-neutral source of truth for completion and verification 
 - Run runnable projects locally before marking changes complete when the task changes a runnable application and local execution is safe.
 - Completion verification must include checking that required documentation and
 changelog updates were made.
+- In manual development, the manual completion check's validation run
+  (`~/.agents/manual-completion/README.md`) is the final run of the applicable
+  suites above. Run focused checks while implementing; don't repeat the full
+  suites separately. Autobuild runs keep their own controller validation.
+
 ## Reporting
 
 - Explicitly state which verification commands were run.

@@ -10,6 +10,8 @@
 
 Before reporting manual work complete, follow `~/.agents/manual-completion/README.md`
 and run `python3 ~/.agents/manual-completion/complete.py` with task-local evidence.
+Its `--run-validation` run is the final comprehensive validation: run focused checks
+while implementing, and don't run the full final suites yourself before or after it.
 Resolve `NEEDS_ATTENTION` findings where authorized, then rerun the relevant check;
 report blockers instead of normal success. This is one completion check, not an
 autonomous repair loop. Autobuild owns its own completion and is excluded.

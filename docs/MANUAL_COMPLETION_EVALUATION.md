@@ -55,3 +55,39 @@ or configured Autobuild specs.
 
 Next improvement: simplify task-local reconciliation authoring while preserving
 explicit applicability decisions and the existing evidence contract.
+
+## 2026-11-25 - Blocked Runs And Evidence Reuse
+
+Architecture: ADR 0003 addendum (2026-11-25). Usage: `scripts/manual/README.md`.
+
+New automated fixture coverage (14 cases):
+
+| Case | Result |
+| --- | --- |
+| Stale reconciliation fingerprint with `--run-validation` | `blocked`; no command runs, no evidence written |
+| Unacknowledged changed file | `blocked`; no command runs |
+| In-progress Git operation and secret-like file | `blocked`; no command runs |
+| Second `--run-validation`, nothing changed | `reused`; same evidence, command ran once, PASS |
+| Stored run failed | `executed` again |
+| Repository changed | `executed` again; PASS with new evidence |
+| Command list changed | `executed` again |
+| Environment variable added | `executed` again |
+| Only `PWD`/`OLDPWD` differ | `reused` |
+| Evidence older than the reuse window | `executed` again |
+| Evidence without reuse metadata (written before this change) | `executed` again |
+| `--fresh-validation` (function and CLI) | always `executed` |
+| Check without `--run-validation` | `not_requested`; reads evidence only; `not_applicable` without commands |
+
+Verification:
+
+- `autobuild/.venv/bin/python -m pytest scripts/tests autobuild/tests -q`:
+  **489 passed**, including 34 manual completion fixtures (20 existing, 14 new)
+  and the unchanged Autobuild/controller/runtime coverage.
+- `python3 scripts/setup/install.py --apply` updated both installed adapters;
+  `python3 scripts/setup/audit_instructions.py`: **PASS**.
+- The implementation task used the updated check for its own completion.
+
+Remaining limits: agents still choose the commands (recorded in
+`validation_scope`) and invocation stays instructional. Reuse can't see changes
+outside Git and the environment (dependency installs into ignored directories,
+tool upgrades); the one-hour window and `--fresh-validation` cover them.
